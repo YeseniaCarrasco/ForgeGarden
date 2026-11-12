@@ -6,5 +6,6 @@
   {% if role == "admin" %}
     <p class="badge">Admin access</p>
   {% endif %}
+  <p class="link-row"><a href="{{ url_for('about') }}">About the Forge Garden</a></p>
   <a class="button" href="{{ url_for('logout') }}">Log out</a>
 {% endblock %}

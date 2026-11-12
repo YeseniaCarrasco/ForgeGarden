@@ -41,6 +41,24 @@ button:hover, .button:hover { background: var(--accent-hover); }
   display: inline-block; margin: 0; padding: 4px 10px; border-radius: 999px;
   background: var(--ok-bg); color: var(--ok); font-size: .8rem;
 }
+.card.wide { max-width: 680px; }
+a { color: var(--accent); }
+.site-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
+}
+.brand { font-weight: 600; }
+.button.small { display: inline-block; width: auto; margin: 0; padding: 8px 18px; font-size: .9rem; }
+.link-row a { text-decoration: none; }
+.link-row a:hover { text-decoration: underline; }
+.link-row { margin: 16px 0 0; text-align: center; font-size: .9rem; }
+h2 { font-size: 1.15rem; margin: 28px 0 8px; }
+section p, section li { line-height: 1.6; }
+.features { columns: 2; column-gap: 24px; padding-left: 20px; }
+.features li { break-inside: avoid; }
+.goals { padding-left: 20px; }
+.goals li { margin-bottom: 10px; }
+@media (max-width: 520px) { .features { columns: 1; } .card { padding: 24px 20px; } }
 .samples { margin-top: 24px; font-size: .875rem; color: var(--muted); }
 .samples summary { cursor: pointer; }
 table { width: 100%; margin-top: 8px; border-collapse: collapse; }

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}About · {{ site_name }}{% endblock %}
+{% block card_class %}wide{% endblock %}
+{% block content %}
+  <header class="site-header">
+    <span class="brand">{{ site_name }}</span>
+    {% if session.username %}
+      <a class="button small" href="{{ url_for('dashboard') }}">Dashboard</a>
+    {% else %}
+      <a class="button small" href="{{ url_for('login') }}">Log in</a>
+    {% endif %}
+  </header>
+
+  <h1>About the Forge Garden</h1>
+  <p class="muted">Santa Clara University · Center for Sustainability</p>
+
+  <section>
+    <h2>What is the Forge?</h2>
+    <p>
+      The Center for Sustainability's Forge Garden is a half-acre edible, organic
+      garden that serves as a hub for sustainable food system education. Forge Garden
+      Programs aim to build a just and sustainable food system through education,
+      collaboration, and connectivity, using the garden as a living lab for
+      interdisciplinary learning.
+    </p>
+    <p>
+      Established in 2008, the garden currently hosts:
+    </p>
+    <ul class="features">
+      <li>Chickens</li>
+      <li>An apiary</li>
+      <li>A 400-square-foot greenhouse</li>
+      <li>A compost center</li>
+      <li>Over 20 fruit trees</li>
+      <li>Over 15,000 square feet of garden beds</li>
+      <li>An outdoor kitchen</li>
+      <li>The 2007 Solar Decathlon House, used as a public commons</li>
+    </ul>
+    <p>Visit our history page to learn how the Forge earned its name.</p>
+    <p class="badge">Certified organic through California Certified Organic Farmers (CCOF)</p>
+  </section>
+
+  <section>
+    <h2>Program Goals</h2>
+    <ol class="goals">
+      <li>
+        <strong>Educating</strong> SCU and surrounding communities by using our gardens
+        as living labs for place-based, interdisciplinary learning.
+      </li>
+      <li>
+        <strong>Building community resilience</strong> by produce donation, food
+        education, farm stand operation, and neighborhood collaboration.
+      </li>
+      <li>
+        <strong>Helping to build a just and sustainable food system</strong> by
+        utilizing ancestral and innovative, small-scale sustainable agriculture
+        practices.
+      </li>
+    </ol>
+  </section>
+{% endblock %}
