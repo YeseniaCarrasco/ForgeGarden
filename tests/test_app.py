@@ -4,9 +4,10 @@ from app import create_app
 
 
 @pytest.fixture
-def client():
+def client(tmp_path):
     app = create_app({
         "TESTING": True,
+        "DATABASE": str(tmp_path / "test.db"),
         "SECRET_KEY": "test",
         "ADMIN_USERNAME": "alice",
         "SITE_NAME": "Test Garden",

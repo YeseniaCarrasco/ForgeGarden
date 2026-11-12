@@ -1,0 +1,11 @@
+<header class="site-header">
+  <a class="brand" href="{{ url_for('about') }}">{{ site_name }}</a>
+  <nav class="site-nav">
+    <a href="{{ url_for('volunteer_calendar') }}">Volunteer Calendar</a>
+    {% if session.username %}
+      <a class="button small" href="{{ url_for('dashboard') }}">Dashboard</a>
+    {% else %}
+      <a class="button small" href="{{ url_for('login') }}">Log in</a>
+    {% endif %}
+  </nav>
+</header>

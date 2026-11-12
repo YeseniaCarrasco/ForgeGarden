@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Volunteer Calendar · {{ site_name }}{% endblock %}
+{% block card_class %}full{% endblock %}
+{% block content %}
+  {% include "_header.html" %}
+
+  <h1>Volunteer Calendar</h1>
+  <p class="muted">Drop in during open volunteer hours, or log in to sign up for the daily compost route.</p>
+
+  <ul class="legend">
+    {% for kind, label in kind_labels.items() %}
+      <li><span class="swatch {{ kind }}"></span>{{ label }}</li>
+    {% endfor %}
+  </ul>
+
+  <div class="week-nav">
+    <a class="button small ghost" href="{{ url_for('volunteer_calendar', week=prev_week) }}"
+       aria-label="Previous week">← Prev</a>
+    <div class="week-title">
+      <h2>{{ week_label }}</h2>
+      {% if not is_current_week %}
+        <a class="today-link" href="{{ url_for('volunteer_calendar') }}">Jump to this week</a>
+      {% endif %}
+    </div>
+    <a class="button small ghost" href="{{ url_for('volunteer_calendar', week=next_week) }}"
+       aria-label="Next week">Next →</a>
+  </div>
+
+  <div class="week" style="--rows: {{ grid_rows }}">
+    <div class="week-head" aria-hidden="true">
+      <div></div>
+      {% for day in days %}
+        <div class="week-day{% if day.date == today %} today{% endif %}">
+          <span class="wd-name">{{ day.date.strftime('%a') }}</span>
+          <span class="wd-num">{{ day.date.day }}</span>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="week-body">
+      <div class="time-axis" aria-hidden="true">
+        {% for label, row in hours %}
+          <div class="hour" style="grid-row: {{ row }}">{{ label }}</div>
+        {% endfor %}
+      </div>
+
+      {% for day in days %}
+        {% set d = day.date %}
+        <div class="day-col{% if d == today %} today{% endif %}{% if d < today %} past{% endif %}"
+             style="grid-template-columns: {{ day.columns }}" aria-label="{{ d|long_date }}">
+          <div class="day-label">
+            <span class="day-name">{{ d.strftime('%a') }}</span>
+            <span class="day-num">{{ d.strftime('%b') }} {{ d.day }}</span>
+            {% if d == today %}<span class="today-tag">Today</span>{% endif %}
+          </div>
+          {% for b in day.blocks %}
+            {% set opp = b.opp %}
+            <div class="opp {{ opp.kind }}{% if b.stacked %} stacked{% endif %}" style="grid-row: {{ b.row }}; grid-column: {{ b.col }}"
+                 title="{{ opp.title }} · {{ opp.time_label }}">
+              <span class="opp-title">{{ opp.title }}</span>
+              <span class="opp-time">{{ opp.time_label }}</span>
+              {% if opp.key == "compost" %}
+                {% set iso = d.isoformat() %}
+                {% if iso in signups %}
+                  {% if signups[iso] == session.username %}
+                    <span class="status mine">You're signed up ✓</span>
+                  {% else %}
+                    <span class="status filled">Filled</span>
+                  {% endif %}
+                {% elif d >= today %}
+                  <a class="status open" href="{{ url_for('compost_signup', day=iso) }}"
+                     aria-label="Sign up for the compost route on {{ d|long_date }}">Sign up</a>
+                {% endif %}
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% if not session.username %}
+    <p class="muted-small cal-note">You'll be asked to log in when you sign up for a compost route.</p>
+  {% endif %}
+
+  <section>
+    <h2>Weekly schedule</h2>
+    <div class="schedule">
+      {% for when, opps in summary %}
+        <div class="schedule-group">
+          <h3>{{ when }}</h3>
+          {% for opp in opps %}
+            <div class="opp {{ opp.kind }} detail">
+              <span class="opp-title">{{ opp.title }} · {{ opp.time_label }}</span>
+              <span>{{ opp.description }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}
