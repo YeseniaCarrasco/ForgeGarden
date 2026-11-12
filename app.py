@@ -1,66 +1,26 @@
-"""ForgeGarden - Flask app with sample users and a volunteer calendar."""
+"""ForgeGarden - Flask app for the Forge Garden.
+
+Pages: About, Volunteer Calendar (with compost route sign-ups), Plant Help
+board, Garden Journal, login, and dashboard.
+"""
 import os
 import sqlite3
-from datetime import date, datetime, timedelta
-from functools import wraps
+from datetime import date, timedelta
 
 from dotenv import load_dotenv
 from flask import (
-    Flask, abort, current_app, flash, g, redirect, render_template, request,
-    session, url_for,
+    Flask, abort, flash, redirect, render_template, request, session, url_for,
 )
-from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.security import check_password_hash
 
+import board
+import content
+import journal
 import volunteer
+from auth import SAMPLE_USERS, USERS, display_name, is_admin, login_required, role_for
+from db import close_db, current_date, get_db
 
 load_dotenv()
-
-# Sample users for development. Passwords are hashed before use;
-# the plain-text values are kept only so the login page can display them.
-# Which user is the admin is set by ADMIN_USERNAME in .env.
-SAMPLE_USERS = {
-    "alice": {"name": "Alice Anvil", "password": "password123"},
-    "bob": {"name": "Bob Builder", "password": "builder456"},
-    "carol": {"name": "Carol Gardener", "password": "garden789"},
-}
-USERS = {
-    username: {
-        "name": info["name"],
-        "password_hash": generate_password_hash(info["password"]),
-    }
-    for username, info in SAMPLE_USERS.items()
-}
-
-# One row per compost route day; UNIQUE route_date enforces one volunteer per day.
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS compost_signups (
-    id INTEGER PRIMARY KEY,
-    route_date TEXT NOT NULL UNIQUE,
-    username TEXT NOT NULL,
-    training_date TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-)
-"""
-
-
-def get_db():
-    """Open (and lazily create) the SQLite database for this request."""
-    if "db" not in g:
-        g.db = sqlite3.connect(current_app.config["DATABASE"])
-        g.db.row_factory = sqlite3.Row
-        g.db.execute(SCHEMA)
-    return g.db
-
-
-def close_db(_exc=None):
-    db = g.pop("db", None)
-    if db is not None:
-        db.close()
-
-
-def current_date():
-    """Today's date; tests can pin it with the TODAY config value."""
-    return current_app.config.get("TODAY") or date.today()
 
 
 def parse_day(text):
@@ -68,17 +28,6 @@ def parse_day(text):
         return date.fromisoformat(text)
     except ValueError:
         abort(404)
-
-
-def login_required(view):
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        if "username" not in session:
-            flash("Please log in to continue.", "error")
-            return redirect(url_for("login", next=request.path))
-        return view(*args, **kwargs)
-
-    return wrapped
 
 
 def create_app(test_config=None):
@@ -94,13 +43,18 @@ def create_app(test_config=None):
 
     app.teardown_appcontext(close_db)
     app.add_template_filter(volunteer.long_date, "long_date")
-
-    def role_for(username):
-        return "admin" if username == app.config["ADMIN_USERNAME"] else "user"
+    app.add_template_filter(content.paragraphs, "paragraphs")
+    app.add_template_filter(content.short_date, "short_date")
+    app.register_blueprint(board.bp)
+    app.register_blueprint(journal.bp)
 
     @app.context_processor
-    def inject_site_name():
-        return {"site_name": app.config["SITE_NAME"]}
+    def inject_globals():
+        return {
+            "site_name": app.config["SITE_NAME"],
+            "display_name": display_name,
+            "is_admin": is_admin,
+        }
 
     @app.route("/")
     def about():

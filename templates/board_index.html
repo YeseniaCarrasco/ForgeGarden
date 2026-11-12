@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Plant Help · {{ site_name }}{% endblock %}
+{% block card_class %}wide{% endblock %}
+{% block content %}
+  {% include "_header.html" %}
+
+  <div class="page-head">
+    <div>
+      <h1>Plant Help</h1>
+      <p class="muted">Wilting leaves? Mystery pests? Ask the garden community.</p>
+    </div>
+    {% if session.username %}
+      <a class="button small purple" href="{{ url_for('board.ask') }}">Ask a question</a>
+    {% else %}
+      <a class="button small purple" href="{{ url_for('login', next=url_for('board.ask')) }}">Log in to ask</a>
+    {% endif %}
+  </div>
+
+  {% include "_organic_note.html" %}
+
+  <nav class="chips" aria-label="Filter by topic">
+    <a class="chip{% if not topic %} selected{% endif %}" href="{{ url_for('board.index') }}">All</a>
+    {% for key, label in topics.items() %}
+      <a class="chip{% if topic == key %} selected{% endif %}" href="{{ url_for('board.index', topic=key) }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+
+  {% if questions %}
+    <ul class="post-list">
+      {% for q in questions %}
+        <li>
+          <a class="post-title" href="{{ url_for('board.question', qid=q.id) }}">{{ q.title }}</a>
+          <div class="post-meta">
+            <span class="tag topic">{{ topics[q.topic] }}</span>
+            {% if q.helpful_answer_id %}<span class="tag solved">✓ Helped</span>{% endif %}
+            <span>{{ display_name(q.username) }} · {{ q.created_at|short_date }}</span>
+            <span class="count">{{ q.answer_count }} answer{{ "" if q.answer_count == 1 else "s" }}</span>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">
+      {% if topic %}No {{ topics[topic] }} questions yet.{% else %}No questions yet. Be the first to ask!{% endif %}
+    </p>
+  {% endif %}
+{% endblock %}

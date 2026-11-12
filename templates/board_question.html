@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ q.title }} · Plant Help · {{ site_name }}{% endblock %}
+{% block card_class %}wide{% endblock %}
+{% block content %}
+  {% include "_header.html" %}
+  <p class="link-row left"><a href="{{ url_for('board.index') }}">← Plant Help</a></p>
+
+  <article class="question">
+    <div class="post-meta">
+      <a class="tag topic" href="{{ url_for('board.index', topic=q.topic) }}">{{ topics[q.topic] }}</a>
+      {% if q.helpful_answer_id %}<span class="tag solved">✓ Helped</span>{% endif %}
+    </div>
+    <h1>{{ q.title }}</h1>
+    <p class="byline">Asked by {{ display_name(q.username) }} · {{ q.created_at|short_date }}</p>
+    <div class="prose">
+      {% for p in q.body|paragraphs %}<p>{{ p }}</p>{% endfor %}
+    </div>
+    {% if can_delete(q.username) %}
+      <form method="post" action="{{ url_for('board.delete_question', qid=q.id) }}"
+            onsubmit="return confirm('Delete this question and all its answers?');">
+        <button type="submit" class="link-button">Delete question</button>
+      </form>
+    {% endif %}
+  </article>
+
+  <section id="answers">
+    <h2>{{ answers|length }} answer{{ "" if answers|length == 1 else "s" }}</h2>
+    {% for a in answers %}
+      {% set helpful = q.helpful_answer_id == a.id %}
+      <div class="answer{% if helpful %} helpful{% endif %}" id="answer-{{ a.id }}">
+        {% if helpful %}<p class="tag solved">✓ This helped {{ display_name(q.username) }}</p>{% endif %}
+        <div class="prose">
+          {% for p in a.body|paragraphs %}<p>{{ p }}</p>{% endfor %}
+        </div>
+        <div class="answer-foot">
+          <span class="byline">
+            {{ display_name(a.username) }}
+            {% if is_admin(a.username) %}<span class="tag manager">Garden Manager</span>{% endif %}
+            · {{ a.created_at|short_date }}
+          </span>
+          <span class="actions">
+            {% if session.username == q.username %}
+              <form method="post" action="{{ url_for('board.mark_helpful', qid=q.id, aid=a.id) }}">
+                <button type="submit" class="link-button green">{{ "Unmark" if helpful else "This helped" }}</button>
+              </form>
+            {% endif %}
+            {% if can_delete(a.username) %}
+              <form method="post" action="{{ url_for('board.delete_answer', aid=a.id) }}"
+                    onsubmit="return confirm('Delete this answer?');">
+                <button type="submit" class="link-button">Delete</button>
+              </form>
+            {% endif %}
+          </span>
+        </div>
+      </div>
+    {% else %}
+      <p class="empty">No answers yet.</p>
+    {% endfor %}
+
+    {% if session.username %}
+      <form method="post" action="{{ url_for('board.answer', qid=q.id) }}" class="answer-form">
+        <label for="body">Your answer</label>
+        {% if answer_error %}<div class="flash error" role="alert">{{ answer_error }}</div>{% endif %}
+        <textarea id="body" name="body" rows="5" maxlength="5000" required
+                  placeholder="Share what's worked for you. Organic methods only, please.">{{ request.form.get('body', '') }}</textarea>
+        <button type="submit" class="purple">Post answer</button>
+      </form>
+    {% else %}
+      <p class="notice"><a href="{{ url_for('login', next=request.path) }}">Log in</a> to answer this question.</p>
+    {% endif %}
+  </section>
+{% endblock %}

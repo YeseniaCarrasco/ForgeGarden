@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ post.title }} · Garden Journal · {{ site_name }}{% endblock %}
+{% block card_class %}wide{% endblock %}
+{% block content %}
+  {% include "_header.html" %}
+  <p class="link-row left"><a href="{{ url_for('journal.index') }}">← Garden Journal</a></p>
+
+  <article class="journal-post">
+    <div class="post-meta"><span class="tag {{ post.kind }}">{{ kinds[post.kind] }}</span></div>
+    <h1>{{ post.title }}</h1>
+    <p class="byline">
+      {{ display_name(post.username) }} <span class="tag manager">Garden Manager</span>
+      · {{ post.created_at|short_date }}{% if post.updated_at %} · edited {{ post.updated_at|short_date }}{% endif %}
+    </p>
+
+    {% if post.link_url %}
+      <a class="reading-link" href="{{ post.link_url }}" target="_blank" rel="noopener noreferrer">
+        <span class="reading-label">📖 {{ "Reading" if post.kind == "reading" else "Link" }}</span>
+        <span class="reading-title">{{ post.link_title or post.link_url }}</span>
+      </a>
+    {% elif post.link_title %}
+      <p class="reading-link"><span class="reading-label">📖 Reading</span>
+        <span class="reading-title">{{ post.link_title }}</span></p>
+    {% endif %}
+
+    <div class="prose">
+      {% for p in post.body|paragraphs %}<p>{{ p }}</p>{% endfor %}
+    </div>
+  </article>
+
+  {% if is_admin() %}
+    <div class="admin-actions">
+      <a class="button small ghost" href="{{ url_for('journal.edit', pid=post.id) }}">Edit</a>
+      <form method="post" action="{{ url_for('journal.delete', pid=post.id) }}"
+            onsubmit="return confirm('Delete this journal post?');">
+        <button type="submit" class="link-button">Delete</button>
+      </form>
+    </div>
+  {% endif %}
+{% endblock %}

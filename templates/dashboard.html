@@ -8,6 +8,13 @@
   {% endif %}
 
   <a class="button purple" href="{{ url_for('volunteer_calendar') }}">Volunteer Calendar</a>
+  <div class="dash-links">
+    <a class="button small ghost" href="{{ url_for('board.index') }}">Plant Help</a>
+    <a class="button small ghost" href="{{ url_for('journal.index') }}">Garden Journal</a>
+  </div>
+  {% if role == "admin" %}
+    <p class="link-row"><a href="{{ url_for('journal.new') }}">+ Write a journal post</a></p>
+  {% endif %}
 
   <h2>Your compost routes</h2>
   {% if signups %}
