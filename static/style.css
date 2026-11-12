@@ -1,0 +1,47 @@
+:root {
+  --bg: #f3f5f1; --card: #fff; --text: #1f2a1f; --muted: #667066;
+  --accent: #2f7d4f; --accent-hover: #256640; --border: #d8ddd6;
+  --error-bg: #fdecea; --error: #a12a1f; --ok-bg: #e7f5ec; --ok: #1f6b3d;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141814; --card: #1e241e; --text: #e6ebe6; --muted: #9aa59a;
+    --accent: #3d9a62; --accent-hover: #4caf73; --border: #334033;
+    --error-bg: #3a1d1a; --error: #f2a49b; --ok-bg: #1b3324; --ok: #9fdcb5;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+  background: var(--bg); color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.card {
+  width: 100%; max-width: 380px; background: var(--card); padding: 32px;
+  border: 1px solid var(--border); border-radius: 12px;
+}
+h1 { margin: 0 0 4px; font-size: 1.5rem; }
+.muted { color: var(--muted); margin: 0 0 24px; }
+label { display: block; font-size: .875rem; margin: 12px 0 6px; }
+input {
+  width: 100%; padding: 10px 12px; font-size: 1rem; color: var(--text);
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+}
+input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+button, .button {
+  display: block; width: 100%; margin-top: 20px; padding: 10px; font-size: 1rem;
+  text-align: center; text-decoration: none; color: #fff; background: var(--accent);
+  border: 0; border-radius: 8px; cursor: pointer;
+}
+button:hover, .button:hover { background: var(--accent-hover); }
+.flash { padding: 10px 12px; border-radius: 8px; margin-bottom: 16px; font-size: .9rem; }
+.flash.error { background: var(--error-bg); color: var(--error); }
+.flash.success { background: var(--ok-bg); color: var(--ok); }
+.badge {
+  display: inline-block; margin: 0; padding: 4px 10px; border-radius: 999px;
+  background: var(--ok-bg); color: var(--ok); font-size: .8rem;
+}
+.samples { margin-top: 24px; font-size: .875rem; color: var(--muted); }
+.samples summary { cursor: pointer; }
+table { width: 100%; margin-top: 8px; border-collapse: collapse; }
+th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }

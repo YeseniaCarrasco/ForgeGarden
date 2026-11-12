@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Log in · {{ site_name }}{% endblock %}
+{% block content %}
+  <h1>{{ site_name }}</h1>
+  <p class="muted">Sign in to your account</p>
+  <form method="post">
+    <label for="username">Username</label>
+    <input id="username" name="username" autocomplete="username" required autofocus>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Log in</button>
+  </form>
+
+  <details class="samples">
+    <summary>Sample accounts</summary>
+    <table>
+      <tr><th>Username</th><th>Password</th><th>Role</th></tr>
+      {% for username, info in sample_users.items() %}
+        <tr><td>{{ username }}</td><td><code>{{ info.password }}</code></td><td>{{ info.role }}</td></tr>
+      {% endfor %}
+    </table>
+  </details>
+{% endblock %}
