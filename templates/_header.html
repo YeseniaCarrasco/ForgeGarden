@@ -1,7 +1,10 @@
+{% set ep = request.endpoint or "" %}
 <header class="site-header">
   <a class="brand" href="{{ url_for('about') }}">{{ site_name }}</a>
   <nav class="site-nav">
-    <a href="{{ url_for('volunteer_calendar') }}">Volunteer Calendar</a>
+    <a href="{{ url_for('volunteer_calendar') }}"{% if ep.startswith('volunteer_calendar') or ep.startswith('compost') %} class="active"{% endif %}>Volunteer Calendar</a>
+    <a href="{{ url_for('board.index') }}"{% if ep.startswith('board.') %} class="active"{% endif %}>Plant Help</a>
+    <a href="{{ url_for('journal.index') }}"{% if ep.startswith('journal.') %} class="active"{% endif %}>Journal</a>
     {% if session.username %}
       <a class="button small" href="{{ url_for('dashboard') }}">Dashboard</a>
     {% else %}

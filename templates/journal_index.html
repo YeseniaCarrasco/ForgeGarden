@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Garden Journal · {{ site_name }}{% endblock %}
+{% block card_class %}wide{% endblock %}
+{% block content %}
+  {% include "_header.html" %}
+
+  <div class="page-head">
+    <div>
+      <h1>Garden Journal</h1>
+      <p class="muted">Thoughts and readings from the garden manager on soil, food systems, and the living world.</p>
+    </div>
+    {% if is_admin() %}
+      <a class="button small purple" href="{{ url_for('journal.new') }}">New post</a>
+    {% endif %}
+  </div>
+
+  <nav class="chips" aria-label="Filter by type">
+    <a class="chip{% if not kind %} selected{% endif %}" href="{{ url_for('journal.index') }}">All</a>
+    {% for key, label in kinds.items() %}
+      <a class="chip{% if kind == key %} selected{% endif %}" href="{{ url_for('journal.index', kind=key) }}">{{ label }}s</a>
+    {% endfor %}
+  </nav>
+
+  {% if posts %}
+    <div class="journal-list">
+      {% for p in posts %}
+        <article class="journal-card {{ p.kind }}">
+          <div class="post-meta">
+            <span class="tag {{ p.kind }}">{{ kinds[p.kind] }}</span>
+            <span>{{ p.created_at|short_date }}</span>
+          </div>
+          <h2><a href="{{ url_for('journal.post', pid=p.id) }}">{{ p.title }}</a></h2>
+          <p>{{ excerpt(p.body) }}</p>
+          <a class="read-more" href="{{ url_for('journal.post', pid=p.id) }}">Read more →</a>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="empty">No journal posts yet. Check back soon!</p>
+  {% endif %}
+{% endblock %}
