@@ -52,8 +52,12 @@ def create_app(test_config=None):
         return {"site_name": app.config["SITE_NAME"]}
 
     @app.route("/")
-    def index():
-        return redirect(url_for("dashboard" if "username" in session else "login"))
+    def about():
+        return render_template("about.html")
+
+    @app.route("/about")
+    def about_alias():
+        return redirect(url_for("about"))
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -89,7 +93,7 @@ def create_app(test_config=None):
     def logout():
         session.clear()
         flash("You have been logged out.", "success")
-        return redirect(url_for("login"))
+        return redirect(url_for("about"))
 
     return app
 

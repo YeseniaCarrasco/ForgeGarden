@@ -14,6 +14,35 @@ def client():
     return app.test_client()
 
 
+def test_homepage_is_about_page(client):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"Program Goals" in resp.data
+    assert b"What is the Forge?" in resp.data
+    assert b"CCOF" in resp.data
+
+
+def test_homepage_has_login_button_when_logged_out(client):
+    assert b'href="/login"' in client.get("/").data
+
+
+def test_homepage_shows_dashboard_button_when_logged_in(client):
+    login(client, "alice", "password123")
+    assert b'href="/dashboard"' in client.get("/").data
+
+
+def test_about_url_redirects_to_homepage(client):
+    resp = client.get("/about")
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/")
+
+
+def test_logout_returns_to_homepage(client):
+    login(client, "alice", "password123")
+    resp = client.get("/logout")
+    assert resp.headers["Location"].endswith("/")
+
+
 def test_site_name_from_config(client):
     assert b"Test Garden" in client.get("/login").data
 
