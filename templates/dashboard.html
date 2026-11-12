@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · {{ site_name }}{% endblock %}
+{% block content %}
+  <h1>Hello, {{ user.name }}</h1>
+  <p class="muted">Logged in as <strong>{{ username }}</strong> ({{ role }})</p>
+  {% if role == "admin" %}
+    <p class="badge">Admin access</p>
+  {% endif %}
+  <a class="button" href="{{ url_for('logout') }}">Log out</a>
+{% endblock %}
