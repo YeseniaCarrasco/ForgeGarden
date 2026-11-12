@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Compost Route Sign-up · {{ site_name }}{% endblock %}
+{% block content %}
+  <p class="kind-tag sign-up">Sign-up required</p>
+  <h1>{{ compost.title }}</h1>
+  <p class="muted">{{ route_day|long_date }} · {{ compost.time_label }}</p>
+  <p>{{ compost.description }}</p>
+
+  {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+
+  {% if closed_reason %}
+    <p class="notice">{{ closed_reason }}</p>
+  {% else %}
+    <form method="post">
+      {% if first_time %}
+        <p class="notice">
+          This is your first compost route, so you'll need a training day first.
+          Choose a day from today through {{ max_training|long_date }}.
+        </p>
+        <label for="training_date">Training day</label>
+        <input id="training_date" name="training_date" type="date" required
+               min="{{ min_training.isoformat() }}" max="{{ max_training.isoformat() }}"
+               value="{{ request.form.get('training_date', '') }}">
+      {% endif %}
+      <button type="submit" class="purple">Sign up for this route</button>
+    </form>
+  {% endif %}
+
+  <p class="link-row">
+    <a href="{{ url_for('volunteer_calendar', week=route_day.isoformat()) }}">← Back to calendar</a>
+  </p>
+{% endblock %}

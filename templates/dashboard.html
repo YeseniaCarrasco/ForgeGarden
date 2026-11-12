@@ -6,6 +6,30 @@
   {% if role == "admin" %}
     <p class="badge">Admin access</p>
   {% endif %}
+
+  <a class="button purple" href="{{ url_for('volunteer_calendar') }}">Volunteer Calendar</a>
+
+  <h2>Your compost routes</h2>
+  {% if signups %}
+    <ul class="signup-list">
+      {% for s in signups %}
+        <li>
+          <div>
+            <strong>{{ s.route_date|long_date }}</strong> · {{ compost.time_label }}
+            {% if s.training_date %}
+              <span class="muted-small">Training day: {{ s.training_date|long_date }}</span>
+            {% endif %}
+          </div>
+          <form method="post" action="{{ url_for('compost_cancel', day=s.route_date.isoformat()) }}">
+            <button type="submit" class="link-button">Cancel</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted-small">No upcoming sign-ups. Pick an open day on the calendar.</p>
+  {% endif %}
+
   <p class="link-row"><a href="{{ url_for('about') }}">About the Forge Garden</a></p>
   <a class="button" href="{{ url_for('logout') }}">Log out</a>
 {% endblock %}

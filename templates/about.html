@@ -2,14 +2,7 @@
 {% block title %}About · {{ site_name }}{% endblock %}
 {% block card_class %}wide{% endblock %}
 {% block content %}
-  <header class="site-header">
-    <span class="brand">{{ site_name }}</span>
-    {% if session.username %}
-      <a class="button small" href="{{ url_for('dashboard') }}">Dashboard</a>
-    {% else %}
-      <a class="button small" href="{{ url_for('login') }}">Log in</a>
-    {% endif %}
-  </header>
+  {% include "_header.html" %}
 
   <h1>About the Forge Garden</h1>
   <p class="muted">Santa Clara University · Center for Sustainability</p>
