@@ -62,9 +62,20 @@ def empty_test_database():
 
 @pytest.fixture(autouse=True)
 def no_real_services(monkeypatch):
-    """Tests never call the real Vertex AI or Google Cloud Storage."""
-    monkeypatch.delenv("VERTEX_PROJECT_ID", raising=False)
+    """Tests never call the real Claude API or Google Cloud Storage.
+
+    The AI tests switch the features on with a fake key and a fake client. As a
+    backstop, any request a real Anthropic client tries to send fails here.
+    """
+    import anthropic
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("GCS_BUCKET", raising=False)
+
+    def no_network(*_args, **_kwargs):
+        raise AssertionError("Tests must use a fake Claude client, never the real API.")
+
+    monkeypatch.setattr(anthropic.Anthropic, "request", no_network)
 
 
 @pytest.fixture
