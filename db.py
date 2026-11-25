@@ -75,6 +75,17 @@ CREATE TABLE IF NOT EXISTS box_reservations (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (farmstand_date, username)
 );
+
+-- Garden Helper chatbot conversations.
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    role TEXT NOT NULL,  -- 'user' or 'assistant'
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS chat_messages_conversation ON chat_messages (conversation_id);
 """
 
 # Columns added after the first release. Older databases get them on first use.

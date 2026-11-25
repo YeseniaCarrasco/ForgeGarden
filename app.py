@@ -2,7 +2,8 @@
 
 Pages: About, Volunteer Calendar (with compost route sign-ups), Plant Help
 board (with photos and the AI Plant Doctor), Garden Journal, Friday Farmstand
-(harvest list and produce box reservations), login, and dashboard.
+(harvest list and produce box reservations), Garden Helper AI chat, login,
+and dashboard.
 """
 import os
 import sqlite3
@@ -15,6 +16,7 @@ from flask import (
 from werkzeug.security import check_password_hash
 
 import board
+import chatbot
 import content
 import farmstand
 import journal
@@ -58,6 +60,7 @@ def create_app(test_config=None):
     app.register_blueprint(journal.bp)
     app.register_blueprint(farmstand.bp)
     app.register_blueprint(storage.bp)
+    app.register_blueprint(chatbot.bp)
 
     @app.errorhandler(413)
     def too_large(_error):

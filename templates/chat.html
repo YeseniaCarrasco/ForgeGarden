@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Garden Helper · {{ site_name }}{% endblock %}
+{% block card_class %}wide{% endblock %}
+{% block content %}
+  {% include "_header.html" %}
+
+  <div class="page-head">
+    <div>
+      <h1>Garden Helper</h1>
+      <p class="muted">Ask about volunteering, the farmstand, the garden, or organic growing.</p>
+    </div>
+    {% if enabled and messages %}
+      <form method="post" action="{{ url_for('chat.new_chat') }}">
+        <button type="submit" class="button small ghost">New chat</button>
+      </form>
+    {% endif %}
+  </div>
+
+  {% if not enabled %}
+    <p class="notice">The Garden Helper isn't set up yet. Check back soon, or ask on the
+      <a href="{{ url_for('board.index') }}">Plant Help</a> board.</p>
+  {% else %}
+    <div class="chat-log" aria-live="polite">
+      <div class="chat-msg assistant">
+        <div class="prose"><p>Hi {{ first_name }}! I'm the Garden Helper, an AI assistant for the Forge Garden. What would you like to know?</p></div>
+      </div>
+      {% for m in messages %}
+        <div class="chat-msg {{ m.role }}"{% if loop.last %} id="latest"{% endif %}>
+          <span class="visually-hidden">{{ "You said:" if m.role == "user" else "Garden Helper said:" }}</span>
+          <div class="prose">{% for p in m.content|paragraphs %}<p>{{ p }}</p>{% endfor %}</div>
+        </div>
+      {% endfor %}
+      <div class="chat-msg assistant chat-pending" id="chat-pending" hidden>
+        <div class="prose"><p>Thinking…</p></div>
+      </div>
+    </div>
+
+    {% if not messages %}
+      <form method="post" class="chat-suggestions" aria-label="Suggested questions">
+        {% for s in suggestions %}
+          <button type="submit" name="message" value="{{ s }}" class="chip">{{ s }}</button>
+        {% endfor %}
+      </form>
+    {% endif %}
+
+    <form method="post" class="chat-form" id="chat-form">
+      <label for="message" class="visually-hidden">Your message</label>
+      <textarea id="message" name="message" rows="2" maxlength="{{ max_chars }}" required
+                placeholder="Ask a question…"></textarea>
+      <button type="submit" class="purple" id="chat-send">Send</button>
+    </form>
+    <p class="field-hint">
+      AI answers can be wrong. For a sick plant, post on <a href="{{ url_for('board.ask') }}">Plant Help</a> with a photo.
+      {{ remaining }} of {{ daily_limit }} messages left today.
+    </p>
+
+    <script>
+      (function () {
+        var log = document.querySelector(".chat-log");
+        log.scrollTop = log.scrollHeight;
+        var box = document.getElementById("message");
+        // Enter sends; Shift+Enter adds a new line.
+        box.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && !e.shiftKey && box.value.trim()) {
+            e.preventDefault();
+            document.getElementById("chat-form").requestSubmit();
+          }
+        });
+        document.querySelectorAll(".chat-form, .chat-suggestions").forEach(function (form) {
+          form.addEventListener("submit", function () {
+            document.getElementById("chat-pending").hidden = false;
+            log.scrollTop = log.scrollHeight;
+            // Disable after the browser reads the clicked button's value.
+            setTimeout(function () {
+              document.querySelectorAll(".chat-form button, .chat-suggestions button")
+                .forEach(function (b) { b.disabled = true; });
+            }, 0);
+          });
+        });
+      })();
+    </script>
+  {% endif %}
+{% endblock %}

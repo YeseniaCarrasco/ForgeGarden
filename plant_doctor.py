@@ -63,7 +63,8 @@ def is_enabled():
     return bool(current_app.config.get("ANTHROPIC_API_KEY"))
 
 
-def _client():
+def get_client():
+    """One shared Anthropic client per app (also used by the Garden Helper chat)."""
     import anthropic
 
     client = current_app.extensions.get("anthropic_client")
@@ -100,7 +101,7 @@ def diagnose(title, body, photo=None):
     })
 
     try:
-        response = _client().beta.messages.create(
+        response = get_client().beta.messages.create(
             model=MODEL,
             max_tokens=4000,
             system=SYSTEM_PROMPT,

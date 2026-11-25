@@ -8,6 +8,7 @@ A Flask web app for Santa Clara University's Forge Garden. It has:
 - **Plant Help**, a community question-and-answer board for plant problems like wilting or pests. Anyone can read it; logged-in users can ask (with an optional photo) and answer.
 - The **Plant Doctor**, an AI (Claude) that writes a first take on each new Plant Help question: a suggested topic, likely causes, and an organic treatment idea.
 - A **Garden Journal**, a blog where the garden manager shares thoughts and readings about the garden and the environment, with optional photos.
+- The **Garden Helper**, an AI chatbot (Claude) that answers questions about volunteering, the farmstand, the garden, and organic growing.
 - A **Friday Farmstand** page showing what's freshly harvested each week (with photos), where students can reserve a produce box.
 - A **dashboard** where logged-in volunteers can see and cancel their upcoming sign-ups.
 
@@ -33,7 +34,7 @@ Requires Python 3.10 or newer.
    | `SECRET_KEY`     | Signs session cookies. If empty, the app falls back to an insecure dev-only key.         |
    | `ADMIN_USERNAME` | Which sample user is the admin / garden manager (for example `alice`). Everyone else is `user`. |
    | `SITE_NAME`      | Name shown in the page header. Defaults to `Forge Garden`.                               |
-   | `ANTHROPIC_API_KEY` | Optional. Turns on the Plant Doctor (AI). Get a key at https://console.anthropic.com. Leave empty to turn it off. |
+   | `ANTHROPIC_API_KEY` | Optional. Turns on the Plant Doctor and the Garden Helper chat (AI). Get a key at https://console.anthropic.com. Leave empty to turn it off. |
    | `GCS_BUCKET`     | Optional. Name of a Google Cloud Storage bucket for photos. Leave empty to store photos in `instance/uploads/` instead. |
 
    Fill in `SECRET_KEY` and `ADMIN_USERNAME` yourself. One way to generate a secret key:
@@ -80,6 +81,7 @@ These accounts exist for development only. Their passwords are also shown on the
 | `/farmstand/<YYYY-MM-DD>/reserve`, `/cancel` | Yes (POST) | Reserve or cancel your produce box for that Friday.          |
 | `/farmstand/<YYYY-MM-DD>/items`, `/settings`, `/farmstand/items/<id>/delete` | Admin only (POST) | Add or remove harvest items; set the number of boxes and a note. |
 | `/photos/<key>`                     | No             | An uploaded photo.                                                  |
+| `/garden-helper/`                   | Yes            | Garden Helper AI chat. POST `/garden-helper/new` starts a new chat. |
 | `/login`                            | No             | Login form.                                                         |
 | `/dashboard`                        | Yes            | Your name, role, and upcoming compost routes.                       |
 | `/logout`                           | No             | Logs out and returns to the homepage.                               |
@@ -132,6 +134,15 @@ When `ANTHROPIC_API_KEY` is set, each new question is sent (with its photo, if a
 
 This shows on the question page in a box clearly labeled as an AI draft, above the community answers. It runs while the question is being posted, so posting takes up to about a minute. If the AI is off or the call fails, the question is posted normally without a draft ("Not sure" questions go under Other). The prompt is in [`plant_doctor.py`](plant_doctor.py). Each question costs a few cents of API usage.
 
+## Garden Helper (AI chat)
+
+A chatbot for logged-in users at `/garden-helper/`, linked in the header and dashboard. It uses Claude (`claude-opus-5-5`) and answers from real site data: every request includes the garden's facts, the weekly volunteer schedule, today's date, and the next farmstand's harvest list, box count, and note. It's told to answer only garden-related questions, use organic methods only, keep replies short, and say so rather than guess when it doesn't know something.
+
+- Conversations are saved in the `chat_messages` table. Each browser session has its own chat, and only that user can see it. **New chat** starts over.
+- Claude sees the last 20 messages of the conversation.
+- Each user can send 40 messages a day (`DAILY_LIMIT` in [`chatbot.py`](chatbot.py)) to keep API costs predictable. Each message costs a fraction of a cent to a few cents.
+- The prompt and garden facts are in [`chatbot.py`](chatbot.py). Update them there if the garden's details change.
+
 ## Garden Journal
 
 - Only the garden manager (the `ADMIN_USERNAME` user) can write, edit, or delete posts. Everyone can read them.
@@ -170,6 +181,7 @@ Posts on both pages are plain text: any HTML is shown as text, not rendered. Lea
     farmstand.py        Friday Farmstand: harvest list and produce box reservations
     storage.py          Photo uploads (local folder or Google Cloud Storage)
     plant_doctor.py     Plant Doctor AI (Claude) for Plant Help questions
+    chatbot.py          Garden Helper AI chat
     content.py          Text helpers: paragraphs, excerpts, dates, form checks
     templates/          Jinja templates (_header.html is the shared nav bar)
     static/style.css    Styles, including light and dark mode colors
@@ -180,4 +192,4 @@ Posts on both pages are plain text: any HTML is shown as text, not rendered. Lea
 
     .venv/bin/pytest
 
-Tests never call the real Anthropic API or Google Cloud (the Plant Doctor tests use a fake client). Tests use a temporary database, a temporary photo folder, and a fixed "today" date (`TODAY` in the app config), so they don't touch `forge.db` and give the same results on any day.
+Tests never call the real Anthropic API or Google Cloud (the Plant Doctor and Garden Helper tests use a fake client). Tests use a temporary database, a temporary photo folder, and a fixed "today" date (`TODAY` in the app config), so they don't touch `forge.db` and give the same results on any day.
