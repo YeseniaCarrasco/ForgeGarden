@@ -1,13 +1,21 @@
 """Plant Help board: community questions and answers about plant problems.
 
-Anyone can read. Logged-in users can ask and answer. The person who asked
-can mark one answer as the one that helped. Authors can delete their own
-posts; the garden manager (admin) can delete any post.
+Anyone can read. Logged-in users can ask and answer, and can attach a photo
+to a question. The person who asked can mark one answer as the one that
+helped. Authors can delete their own posts; the garden manager (admin) can
+delete any post.
+
+When the Plant Doctor (AI) is on, each new question gets an AI first take:
+a suggested topic, likely causes, and an organic treatment draft.
 """
+import json
+
 from flask import (
     Blueprint, abort, flash, redirect, render_template, request, session, url_for,
 )
 
+import plant_doctor
+import storage
 from auth import is_admin, login_required
 from content import clean
 from db import get_db
@@ -22,6 +30,8 @@ TOPICS = {
     "watering": "Watering",
     "other": "Other",
 }
+# "Not sure" on the ask form: the Plant Doctor picks the topic (or "Other" if it's off).
+NOT_SURE = "auto"
 
 
 def get_question(qid):
@@ -59,32 +69,66 @@ def ask():
     errors = []
     if request.method == "POST":
         topic = request.form.get("topic", "")
-        if topic not in TOPICS:
+        if topic not in TOPICS and topic != NOT_SURE:
             errors.append("Please choose a topic.")
         title, err = clean(request.form, "title", "Title", 150)
         errors += [err] if err else []
         body, err = clean(request.form, "body", "Details", 5000)
         errors += [err] if err else []
+        try:
+            upload = storage.read_upload(request.files.get("photo"))
+        except storage.PhotoError as e:
+            errors.append(f"{e} Please choose the photo again.")
+            upload = None
         if not errors:
+            photo_key = storage.save_photo(*upload) if upload else None
             db = get_db()
             cur = db.execute(
-                "INSERT INTO questions (username, topic, title, body) VALUES (?, ?, ?, ?)",
-                (session["username"], topic, title, body),
+                "INSERT INTO questions (username, topic, title, body, photo_key)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (session["username"], "other" if topic == NOT_SURE else topic,
+                 title, body, photo_key),
             )
+            qid = cur.lastrowid
             db.commit()
+            run_plant_doctor(qid, title, body, upload, let_ai_pick_topic=topic == NOT_SURE)
             flash("Your question is posted.", "success")
-            return redirect(url_for("board.question", qid=cur.lastrowid))
-    return render_template("board_ask.html", topics=TOPICS, errors=errors), (400 if errors else 200)
+            return redirect(url_for("board.question", qid=qid))
+    return render_template(
+        "board_ask.html", topics=TOPICS, not_sure=NOT_SURE, errors=errors,
+        plant_doctor_on=plant_doctor.is_enabled(),
+    ), (400 if errors else 200)
+
+
+def run_plant_doctor(qid, title, body, upload, let_ai_pick_topic):
+    """Save the AI's first take for a new question, if the Plant Doctor is on."""
+    photo = (upload[0], storage.MEDIA_TYPES[upload[1]]) if upload else None
+    diagnosis = plant_doctor.diagnose(title, body, photo)
+    if diagnosis is None:
+        return
+    db = get_db()
+    db.execute(
+        "INSERT OR REPLACE INTO plant_doctor"
+        " (question_id, topic, likely_issues, organic_treatment) VALUES (?, ?, ?, ?)",
+        (qid, *plant_doctor.to_row(diagnosis)),
+    )
+    if let_ai_pick_topic:
+        db.execute("UPDATE questions SET topic = ? WHERE id = ?", (diagnosis.topic, qid))
+    db.commit()
 
 
 @bp.route("/<int:qid>")
 def question(qid, answer_error=None):
     q = get_question(qid)
-    answers = get_db().execute(
+    db = get_db()
+    answers = db.execute(
         "SELECT * FROM answers WHERE question_id = ? ORDER BY id", (qid,)
     ).fetchall()
+    ai = db.execute("SELECT * FROM plant_doctor WHERE question_id = ?", (qid,)).fetchone()
+    if ai:
+        ai = {**dict(ai), "likely_issues": json.loads(ai["likely_issues"])}
     return render_template(
-        "board_question.html", q=q, answers=answers, topics=TOPICS,
+        "board_question.html", q=q, answers=answers, topics=TOPICS, ai=ai,
         can_delete=can_delete, answer_error=answer_error,
     )
 
@@ -133,6 +177,7 @@ def delete_question(qid):
     db = get_db()
     db.execute("DELETE FROM questions WHERE id = ?", (qid,))
     db.commit()
+    storage.delete_photo(q["photo_key"])
     flash("Question deleted.", "success")
     return redirect(url_for("board.index"))
 

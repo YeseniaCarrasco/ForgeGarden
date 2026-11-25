@@ -17,6 +17,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 TEST_USERS = {"alice": "password123", "bob": "builder456", "carol": "garden789"}
 
 
+@pytest.fixture(autouse=True)
+def no_real_services(monkeypatch):
+    """Tests never call the real Vertex AI or Google Cloud Storage."""
+    monkeypatch.delenv("VERTEX_PROJECT_ID", raising=False)
+    monkeypatch.delenv("GCS_BUCKET", raising=False)
+
+
 @pytest.fixture
 def make_client(tmp_path):
     """Return a function that builds a test client with the test users added."""

@@ -1,8 +1,10 @@
 """ForgeGarden - Flask app for the Forge Garden.
 
 Pages: About, Volunteer Calendar (with compost route sign-ups), Plant Help
-board, Garden Journal, register, login, and dashboard. Everything except
-About, Login, and Register requires login.
+board (with photos and the AI Plant Doctor), Garden Journal, Friday Farmstand
+(harvest list and produce box reservations), Garden Helper AI chat, register,
+login, and dashboard. Everything except About, Login, and Register requires
+login.
 """
 import os
 import sqlite3
@@ -15,8 +17,11 @@ from flask import (
 from flask_wtf.csrf import CSRFProtect
 
 import board
+import chatbot
 import content
+import farmstand
 import journal
+import storage
 import volunteer
 from auth import (
     check_login, create_user, get_user, is_admin, login_required, normalize_username,
@@ -56,6 +61,14 @@ def create_app(test_config=None):
         app.config[name] = os.environ.get(name, "")
     app.config["SITE_NAME"] = os.environ.get("SITE_NAME") or "Forge Garden"
     app.config["DATABASE"] = os.path.join(app.root_path, "forge.db")
+    # Photos: a Google Cloud Storage bucket if GCS_BUCKET is set, else this local folder.
+    app.config["GCS_BUCKET"] = os.environ.get("GCS_BUCKET", "").strip()
+    app.config["UPLOAD_FOLDER"] = os.path.join(app.instance_path, "uploads")
+    app.config["MAX_CONTENT_LENGTH"] = storage.MAX_PHOTO_BYTES + 1024 * 1024
+    # Plant Doctor and Garden Helper (Claude on Google Cloud Vertex AI) are on
+    # only when a Google Cloud project is set.
+    app.config["VERTEX_PROJECT_ID"] = os.environ.get("VERTEX_PROJECT_ID", "").strip()
+    app.config["VERTEX_REGION"] = os.environ.get("VERTEX_REGION", "").strip() or "global"
     # Keep the session cookie away from JavaScript and cross-site form posts.
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -79,6 +92,18 @@ def create_app(test_config=None):
     app.add_template_filter(content.short_date, "short_date")
     app.register_blueprint(board.bp)
     app.register_blueprint(journal.bp)
+    app.register_blueprint(farmstand.bp)
+    app.register_blueprint(storage.bp)
+    app.register_blueprint(chatbot.bp)
+
+    @app.errorhandler(413)
+    def too_large(_error):
+        flash("That upload is too big. Photos must be 5 MB or smaller.", "error")
+        # Go back to the form the upload came from (same site only).
+        referrer = request.referrer or ""
+        if referrer.startswith(request.host_url):
+            return redirect(referrer)
+        return redirect(url_for("about"))
 
     @app.context_processor
     def inject_globals():
@@ -147,6 +172,14 @@ def create_app(test_config=None):
             " WHERE username = ? AND route_date >= ? ORDER BY route_date",
             (username, current_date().isoformat()),
         ).fetchall()
+        boxes = [
+            date.fromisoformat(r["farmstand_date"])
+            for r in get_db().execute(
+                "SELECT farmstand_date FROM box_reservations"
+                " WHERE username = ? AND farmstand_date >= ? ORDER BY farmstand_date",
+                (username, current_date().isoformat()),
+            )
+        ]
         signups = [
             {
                 "route_date": date.fromisoformat(r["route_date"]),
@@ -159,6 +192,7 @@ def create_app(test_config=None):
             username=username,
             role=role_for(username),
             signups=signups,
+            boxes=boxes,
             compost=volunteer.COMPOST_ROUTE,
         )
 

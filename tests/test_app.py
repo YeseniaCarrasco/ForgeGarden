@@ -305,7 +305,7 @@ def test_every_post_form_has_csrf_field():
     templates = Path(__file__).resolve().parent.parent / "templates"
     forms = 0
     for path in templates.glob("*.html"):
-        for form in re.findall(r"<form\b.*?</form>", path.read_text(), re.S | re.I):
+        for form in re.findall(r"<form\b.*?</form>", path.read_text(encoding="utf-8"), re.S | re.I):
             if re.search(r'method="post"', form, re.I):
                 forms += 1
                 assert 'name="csrf_token" value="{{ csrf_token() }}"' in form, path.name

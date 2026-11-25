@@ -8,7 +8,7 @@
 
   {% include "_form_errors.html" %}
 
-  <form method="post">
+  <form method="post" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <fieldset class="kind-picker">
       <legend>Post type</legend>
@@ -28,6 +28,14 @@
     <label for="link_url">Link <span class="optional">(optional)</span></label>
     <input id="link_url" name="link_url" type="url" maxlength="500"
            placeholder="https://…" value="{{ values.link_url or '' }}">
+
+    <label for="photo">Photo <span class="optional">(optional)</span></label>
+    {% if values.photo_key %}
+      <img class="form-photo" src="{{ url_for('photos.serve', key=values.photo_key) }}" alt="Current photo">
+      <label class="radio"><input type="checkbox" name="remove_photo" value="1"> Remove this photo</label>
+    {% endif %}
+    <input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+    <p class="field-hint">{{ "Choose a file to replace the current photo. " if values.photo_key }}JPEG, PNG, GIF, or WebP, up to 5 MB.</p>
 
     <label for="body">Post</label>
     <textarea id="body" name="body" rows="12" required>{{ values.body or '' }}</textarea>

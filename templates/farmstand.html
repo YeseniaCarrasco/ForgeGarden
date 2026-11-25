@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Farmstand · {{ site_name }}{% endblock %}
+{% block card_class %}wide{% endblock %}
+{% block content %}
+  {% include "_header.html" %}
+
+  <div class="page-head">
+    <div>
+      <h1>Friday Farmstand</h1>
+      <p class="muted">Fresh, organic produce from the Forge Garden. {{ farmstand.time_label }}: the first hour is student hour, then it's open to everyone.</p>
+    </div>
+  </div>
+
+  <nav class="week-nav" aria-label="Choose a farmstand day">
+    <a class="button small ghost" href="{{ url_for('farmstand.index', day=prev_day) }}"
+       aria-label="Previous farmstand">← Prev</a>
+    <div class="week-title">
+      <h2>{{ day|long_date }}</h2>
+      {% if is_next %}<span class="tag solved">Next farmstand</span>
+      {% else %}<a class="today-link" href="{{ url_for('farmstand.index') }}">Go to the next farmstand</a>{% endif %}
+    </div>
+    <a class="button small ghost" href="{{ url_for('farmstand.index', day=next_day) }}"
+       aria-label="Next farmstand">Next →</a>
+  </nav>
+
+  {% if note %}<p class="notice">{{ note }}</p>{% endif %}
+
+  <section class="box-panel" aria-labelledby="boxes-heading">
+    <h2 id="boxes-heading">Produce boxes</h2>
+    {% if boxes == 0 %}
+      <p class="muted-small">No produce boxes are offered for this day{% if not is_past %} yet. Check back closer to Friday{% endif %}.</p>
+    {% else %}
+      <p class="box-count"><strong>{{ left }}</strong> of {{ boxes }} box{{ "" if boxes == 1 else "es" }} left</p>
+    {% endif %}
+
+    {% if is_past %}
+      {% if mine %}<p class="muted-small">You reserved a box for this farmstand.</p>{% endif %}
+    {% elif mine %}
+      <p class="reserved-msg">✓ You have a box reserved. Pick it up at the farmstand.</p>
+      <form method="post" action="{{ url_for('farmstand.cancel', day=day.isoformat()) }}"
+            onsubmit="return confirm('Cancel your produce box reservation?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="link-button">Cancel my reservation</button>
+      </form>
+    {% elif boxes and left == 0 %}
+      <p class="muted-small">All boxes are reserved. If someone cancels, one will open up here.</p>
+    {% elif boxes %}
+      {% if session.username %}
+        <form method="post" action="{{ url_for('farmstand.reserve', day=day.isoformat()) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="button small purple">Reserve a box</button>
+        </form>
+      {% else %}
+        <a class="button small purple" href="{{ url_for('login', next=request.full_path) }}">Log in to reserve a box</a>
+      {% endif %}
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="harvest-heading">
+    <h2 id="harvest-heading">Fresh this week</h2>
+    {% if items %}
+      <ul class="harvest-grid">
+        {% for item in items %}
+          <li class="harvest-item">
+            {% if item.photo_key %}
+              <img src="{{ url_for('photos.serve', key=item.photo_key) }}" alt="{{ item.name }}" loading="lazy">
+            {% else %}
+              <div class="harvest-placeholder" aria-hidden="true">🥬</div>
+            {% endif %}
+            <div class="harvest-text">
+              <strong>{{ item.name }}</strong>
+              {% if item.note %}<span class="muted-small">{{ item.note }}</span>{% endif %}
+              {% if is_admin() %}
+                <form method="post" action="{{ url_for('farmstand.delete_item', item_id=item.id) }}"
+                      onsubmit="return confirm('Remove this item from the harvest list?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="link-button">Remove</button>
+                </form>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">{% if is_past %}No harvest was listed for this day.{% else %}The harvest list isn't posted yet. Check back Friday morning!{% endif %}</p>
+    {% endif %}
+  </section>
+
+  {% if is_admin() %}
+    <section class="manager-panel" aria-labelledby="manager-heading">
+      <h2 id="manager-heading">Garden manager <span class="tag manager">Only you see this</span></h2>
+
+      <form method="post" action="{{ url_for('farmstand.add_item', day=day.isoformat()) }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h3>Add a harvested item</h3>
+        <label for="name">Item</label>
+        <input id="name" name="name" maxlength="100" required placeholder="e.g. Rainbow chard">
+        <label for="item-note">Details <span class="optional">(optional)</span></label>
+        <input id="item-note" name="note" maxlength="200" placeholder="e.g. $2 a bunch, about 20 bunches">
+        <label for="item-photo">Photo <span class="optional">(optional)</span></label>
+        <input id="item-photo" name="photo" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+        <button type="submit" class="purple">Add to harvest list</button>
+      </form>
+
+      <form method="post" action="{{ url_for('farmstand.settings', day=day.isoformat()) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <h3>Produce boxes and note</h3>
+        <label for="boxes">Boxes available</label>
+        <input id="boxes" name="boxes" type="number" min="{{ reserved }}" max="{{ max_boxes }}" value="{{ boxes }}" required>
+        <label for="day-note">Note for this day <span class="optional">(optional)</span></label>
+        <input id="day-note" name="note" maxlength="300" value="{{ note or '' }}" placeholder="e.g. Bring your own bag!">
+        <button type="submit" class="purple">Save</button>
+      </form>
+
+      <h3>Reservations ({{ reservations|length }})</h3>
+      {% if reservations %}
+        <ol class="reservation-list">
+          {% for r in reservations %}<li>{{ r.username }}</li>{% endfor %}
+        </ol>
+      {% else %}
+        <p class="muted-small">No reservations yet.</p>
+      {% endif %}
+    </section>
+  {% endif %}
+{% endblock %}

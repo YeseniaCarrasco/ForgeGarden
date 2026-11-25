@@ -23,6 +23,10 @@
         <span class="reading-title">{{ post.link_title }}</span></p>
     {% endif %}
 
+    {% if post.photo_key %}
+      <img class="post-photo" src="{{ url_for('photos.serve', key=post.photo_key) }}" alt="Photo for {{ post.title }}">
+    {% endif %}
+
     <div class="prose">
       {% for p in post.body|paragraphs %}<p>{{ p }}</p>{% endfor %}
     </div>
