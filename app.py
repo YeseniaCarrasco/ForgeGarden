@@ -3,8 +3,9 @@
 Pages: About, Volunteer Calendar (with compost route sign-ups), Plant Help
 board (with photos and the AI Plant Doctor), Garden Journal, Friday Farmstand
 (harvest list and produce box reservations), Garden Helper AI chat, register,
-login, and dashboard. Everything except About, Login, and Register requires
-login.
+login, and dashboard. Anyone can view the About page, calendar, Plant Help,
+journal, and farmstand; posting, signing up, reserving, chatting, and the
+dashboard require login.
 """
 import os
 from datetime import date, timedelta
@@ -38,6 +39,17 @@ REQUIRED_SETTINGS = ("SECRET_KEY", "ADMIN_USERNAME", "DATABASE_URL")
 
 # Endpoints anyone can open without logging in. "static" serves the CSS.
 PUBLIC_ENDPOINTS = {"about", "about_alias", "login", "register", "static"}
+
+# Read-only pages anyone can view (GET only). Everything that changes data
+# (asking, answering, signing up, reserving, chatting, managing) still needs
+# login: those routes also have their own login_required / admin_required.
+PUBLIC_VIEW_ENDPOINTS = {
+    "volunteer_calendar",
+    "board.index", "board.question",
+    "journal.index", "journal.post",
+    "farmstand.index",
+    "photos.serve",
+}
 
 
 def parse_day(text):
@@ -130,6 +142,8 @@ def create_app(test_config=None):
             session.clear()  # the account no longer exists
         # endpoint is None for unknown URLs; let those 404 normally.
         if request.endpoint is None or request.endpoint in PUBLIC_ENDPOINTS:
+            return None
+        if request.endpoint in PUBLIC_VIEW_ENDPOINTS and request.method in ("GET", "HEAD"):
             return None
         if "username" not in session:
             return redirect_to_login()

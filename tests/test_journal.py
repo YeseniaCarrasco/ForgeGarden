@@ -24,9 +24,17 @@ def publish(client, **overrides):
     return client.post("/journal/new", data={**POST, **overrides})
 
 
-def test_journal_requires_login(client):
-    assert "/login?next=" in client.get("/journal/").headers["Location"]
-    assert "/login?next=" in client.get("/journal/1").headers["Location"]
+def test_journal_is_viewable_logged_out(client):
+    login(client)  # alice, the garden manager
+    publish(client)
+    client.post("/logout")
+    assert client.get("/journal/").status_code == 200
+    resp = client.get("/journal/1")
+    assert resp.status_code == 200
+    page = resp.get_data(as_text=True)
+    assert POST["title"] in page
+    assert "/journal/1/edit" not in page and "/journal/1/delete" not in page
+    assert "/journal/new" not in client.get("/journal/").get_data(as_text=True)
 
 
 def test_journal_empty_state(client):

@@ -7,7 +7,7 @@ A Flask web app for Santa Clara University's Forge Garden.
 It has:
 
 - An **About page** (the homepage) describing the garden and its program goals.
-- **Accounts**: anyone can register with a username and password, then log in. Every page except About, Login, and Register requires login.
+- **Accounts**: anyone can register with a username and password, then log in. Anyone can view the About page, calendar, Plant Help, journal, and farmstand; posting, signing up, reserving a box, the Garden Helper chat, and the dashboard require login.
 - A **Volunteer Calendar**: a week-by-week grid (9am–6pm) showing drop-in volunteer hours, sign-up shifts, and garden events.
 - **Compost route sign-ups**, with a training day required the first time.
 - **Plant Help**, a community question-and-answer board for plant problems like wilting or pests, with an optional photo on each question.
@@ -88,19 +88,19 @@ See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for the AI-assisted security review
 | `/`                                 | No             | About the Forge Garden. (`/about` redirects here.)                  |
 | `/register`                         | No             | Create an account.                                                  |
 | `/login`                            | No             | Login form.                                                         |
-| `/calendar`                         | Yes            | Volunteer Calendar for the current week (Sunday–Saturday). `?week=2026-12-01` shows the week containing that date. |
+| `/calendar`                         | No (view only) | Volunteer Calendar for the current week (Sunday–Saturday). `?week=2026-12-01` shows the week containing that date. |
 | `/calendar/compost/<YYYY-MM-DD>`    | Yes            | Sign up to run the compost route on that day.                       |
 | `/calendar/compost/<YYYY-MM-DD>/cancel` | Yes (POST) | Cancel your own upcoming sign-up.                                   |
-| `/plant-help/`                      | Yes            | Plant Help board. `?topic=pests` filters by topic.                  |
+| `/plant-help/`                      | No (view only) | Plant Help board. `?topic=pests` filters by topic.                  |
 | `/plant-help/ask`                   | Yes            | Ask a question.                                                     |
-| `/plant-help/<id>`                  | Yes            | A question and its answers.                                         |
-| `/journal/`                         | Yes            | Garden Journal. `?kind=thought` or `?kind=reading` filters by type.  |
-| `/journal/<id>`                     | Yes            | A single journal post.                                              |
+| `/plant-help/<id>`                  | No (view only) | A question and its answers.                                         |
+| `/journal/`                         | No (view only) | Garden Journal. `?kind=thought` or `?kind=reading` filters by type.  |
+| `/journal/<id>`                     | No (view only) | A single journal post.                                              |
 | `/journal/new`, `/journal/<id>/edit`| Admin only     | Write or edit a journal post.                                       |
-| `/farmstand/`                       | Yes            | This week's farmstand: harvest list and produce boxes. `?day=2026-12-01` shows the farmstand in that date's week. |
+| `/farmstand/`                       | No (view only) | This week's farmstand: harvest list and produce boxes. `?day=2026-12-01` shows the farmstand in that date's week. |
 | `/farmstand/<YYYY-MM-DD>/reserve`, `/cancel` | Yes (POST) | Reserve or cancel your produce box for that Friday.          |
 | `/farmstand/<YYYY-MM-DD>/items`, `/settings`, `/farmstand/items/<id>/delete` | Admin only (POST) | Add or remove harvest items; set the number of boxes and a note. |
-| `/photos/<key>`                     | Yes            | An uploaded photo.                                                  |
+| `/photos/<key>`                     | No (view only) | An uploaded photo.                                                  |
 | `/garden-helper/`                   | Yes            | Garden Helper AI chat. POST `/garden-helper/new` starts a new chat. |
 | `/dashboard`                        | Yes            | Your username, role, upcoming compost routes, and produce boxes.    |
 | `/logout`                           | Yes (POST)     | Logs out and returns to the homepage.                               |

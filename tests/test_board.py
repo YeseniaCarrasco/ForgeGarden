@@ -34,9 +34,17 @@ def answer(client, qid=1, body="Check for squash vine borers at the base of the 
 
 # ---- viewing ----
 
-def test_board_requires_login(client):
-    assert "/login?next=" in client.get("/plant-help/").headers["Location"]
-    assert "/login?next=" in client.get("/plant-help/1").headers["Location"]
+def test_board_is_viewable_logged_out(client):
+    as_bob(client)
+    ask(client)
+    client.post("/logout")
+    listing = client.get("/plant-help/").get_data(as_text=True)
+    assert "Why are my squash leaves wilting?" in listing
+    assert "Log in to ask" in listing
+    page = client.get("/plant-help/1").get_data(as_text=True)
+    assert "Leaves droop every afternoon." in page
+    assert "to answer this question" in page  # "Log in to answer this question."
+    assert "Delete question" not in page and 'name="body"' not in page
 
 
 def test_board_empty_state(client):

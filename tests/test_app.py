@@ -63,9 +63,22 @@ def test_public_pages_need_no_login(client, path):
 
 
 @pytest.mark.parametrize("path", [
-    "/dashboard", "/calendar", "/calendar?week=2026-12-01", "/calendar/compost/2026-11-20",
-    "/plant-help/", "/plant-help/1", "/plant-help/ask",
-    "/journal/", "/journal/1", "/journal/new",
+    "/calendar", "/calendar?week=2026-12-01", "/plant-help/", "/journal/", "/farmstand/",
+])
+def test_read_only_pages_are_public(client, path):
+    resp = client.get(path)
+    assert resp.status_code == 200
+    assert "/login" not in resp.headers.get("Location", "")
+
+
+@pytest.mark.parametrize("path", ["/plant-help/1", "/journal/1"])
+def test_missing_posts_are_404_not_login(client, path):
+    assert client.get(path).status_code == 404
+
+
+@pytest.mark.parametrize("path", [
+    "/dashboard", "/calendar/compost/2026-11-20", "/plant-help/ask", "/journal/new",
+    "/garden-helper/",
 ])
 def test_every_other_page_requires_login(client, path):
     resp = client.get(path)
@@ -75,8 +88,19 @@ def test_every_other_page_requires_login(client, path):
 
 
 def test_post_routes_require_login(client):
-    for path in ["/plant-help/1/answer", "/journal/1/delete", "/calendar/compost/2026-11-20"]:
+    for path in ["/plant-help/1/answer", "/journal/1/delete", "/calendar/compost/2026-11-20",
+                 "/farmstand/2026-11-20/reserve", "/farmstand/2026-11-20/items",
+                 "/plant-help/1/delete", "/garden-helper/new"]:
         assert "/login" in client.post(path).headers["Location"]
+
+
+@pytest.mark.parametrize("path", ["/plant-help/", "/calendar", "/journal/", "/farmstand/"])
+def test_public_pages_cannot_be_posted_to_logged_out(client, path):
+    # Public pages are view-only: a POST to them still needs login (or isn't allowed).
+    resp = client.post(path)
+    assert resp.status_code in (302, 405)
+    if resp.status_code == 302:
+        assert "/login" in resp.headers["Location"]
 
 
 def test_unknown_url_is_404(client):
