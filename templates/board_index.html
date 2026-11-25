@@ -34,7 +34,7 @@
             <span class="tag topic">{{ topics[q.topic] }}</span>
             {% if q.helpful_answer_id %}<span class="tag solved">✓ Helped</span>{% endif %}
             {% if q.photo_key %}<span title="Has a photo" aria-label="Has a photo">📷</span>{% endif %}
-            <span>{{ display_name(q.username) }} · {{ q.created_at|short_date }}</span>
+            <span>{{ q.username }} · {{ q.created_at|short_date }}</span>
             <span>{{ q.username }} · {{ q.created_at|short_date }}</span>
             <span class="count">{{ q.answer_count }} answer{{ "" if q.answer_count == 1 else "s" }}</span>
           </div>

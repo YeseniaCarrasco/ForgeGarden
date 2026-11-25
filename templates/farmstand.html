@@ -39,6 +39,7 @@
       <p class="reserved-msg">✓ You have a box reserved. Pick it up at the farmstand.</p>
       <form method="post" action="{{ url_for('farmstand.cancel', day=day.isoformat()) }}"
             onsubmit="return confirm('Cancel your produce box reservation?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="link-button">Cancel my reservation</button>
       </form>
     {% elif boxes and left == 0 %}
@@ -46,6 +47,7 @@
     {% elif boxes %}
       {% if session.username %}
         <form method="post" action="{{ url_for('farmstand.reserve', day=day.isoformat()) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="button small purple">Reserve a box</button>
         </form>
       {% else %}
@@ -71,6 +73,7 @@
               {% if is_admin() %}
                 <form method="post" action="{{ url_for('farmstand.delete_item', item_id=item.id) }}"
                       onsubmit="return confirm('Remove this item from the harvest list?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="link-button">Remove</button>
                 </form>
               {% endif %}
@@ -88,6 +91,7 @@
       <h2 id="manager-heading">Garden manager <span class="tag manager">Only you see this</span></h2>
 
       <form method="post" action="{{ url_for('farmstand.add_item', day=day.isoformat()) }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <h3>Add a harvested item</h3>
         <label for="name">Item</label>
         <input id="name" name="name" maxlength="100" required placeholder="e.g. Rainbow chard">
@@ -99,6 +103,7 @@
       </form>
 
       <form method="post" action="{{ url_for('farmstand.settings', day=day.isoformat()) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <h3>Produce boxes and note</h3>
         <label for="boxes">Boxes available</label>
         <input id="boxes" name="boxes" type="number" min="{{ reserved }}" max="{{ max_boxes }}" value="{{ boxes }}" required>
@@ -110,7 +115,7 @@
       <h3>Reservations ({{ reservations|length }})</h3>
       {% if reservations %}
         <ol class="reservation-list">
-          {% for r in reservations %}<li>{{ display_name(r.username) }} <span class="muted-small">({{ r.username }})</span></li>{% endfor %}
+          {% for r in reservations %}<li>{{ r.username }}</li>{% endfor %}
         </ol>
       {% else %}
         <p class="muted-small">No reservations yet.</p>

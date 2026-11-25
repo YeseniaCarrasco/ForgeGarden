@@ -11,6 +11,7 @@
     </div>
     {% if enabled and messages %}
       <form method="post" action="{{ url_for('chat.new_chat') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="button small ghost">New chat</button>
       </form>
     {% endif %}
@@ -22,7 +23,7 @@
   {% else %}
     <div class="chat-log" aria-live="polite">
       <div class="chat-msg assistant">
-        <div class="prose"><p>Hi {{ first_name }}! I'm the Garden Helper, an AI assistant for the Forge Garden. What would you like to know?</p></div>
+        <div class="prose"><p>Hi {{ username }}! I'm the Garden Helper, an AI assistant for the Forge Garden. What would you like to know?</p></div>
       </div>
       {% for m in messages %}
         <div class="chat-msg {{ m.role }}"{% if loop.last %} id="latest"{% endif %}>
@@ -37,6 +38,7 @@
 
     {% if not messages %}
       <form method="post" class="chat-suggestions" aria-label="Suggested questions">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% for s in suggestions %}
           <button type="submit" name="message" value="{{ s }}" class="chip">{{ s }}</button>
         {% endfor %}
@@ -44,6 +46,7 @@
     {% endif %}
 
     <form method="post" class="chat-form" id="chat-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label for="message" class="visually-hidden">Your message</label>
       <textarea id="message" name="message" rows="2" maxlength="{{ max_chars }}" required
                 placeholder="Ask a question…"></textarea>

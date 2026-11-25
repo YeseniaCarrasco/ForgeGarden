@@ -18,7 +18,7 @@ from flask import (
 import farmstand
 import plant_doctor
 import volunteer
-from auth import display_name, login_required
+from auth import login_required
 from content import clean
 from db import current_date, get_db
 
@@ -224,7 +224,7 @@ def index():
         remaining=max(DAILY_LIMIT - used, 0),
         daily_limit=DAILY_LIMIT,
         max_chars=MAX_MESSAGE_CHARS,
-        first_name=display_name(username).split()[0],
+        username=username,
     )
 
 

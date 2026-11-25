@@ -9,7 +9,6 @@
   {% include "_form_errors.html" %}
 
   <form method="post" enctype="multipart/form-data">
-  <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <fieldset class="kind-picker">
       <legend>Post type</legend>

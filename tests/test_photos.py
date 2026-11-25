@@ -75,6 +75,7 @@ def test_deleting_question_deletes_its_photo(client, tmp_path):
 
 @pytest.mark.parametrize("key", ["nope.png", "../test.db", "..%2Ftest.db", "a" * 32 + ".exe"])
 def test_photo_route_only_serves_stored_photo_names(client, key):
+    login(client, "bob")
     assert client.get(f"/photos/{key}").status_code == 404
 
 
@@ -128,6 +129,7 @@ def test_old_database_gets_photo_columns(tmp_path):
     con.close()
 
     client = make_app(tmp_path).test_client()
+    login(client, "bob")
     assert "Old question" in client.get("/plant-help/1").get_data(as_text=True)
     columns = {row[1] for row in sqlite3.connect(db_path).execute("PRAGMA table_info(questions)")}
     assert "photo_key" in columns

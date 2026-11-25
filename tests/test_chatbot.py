@@ -47,7 +47,7 @@ def test_conversation_round_trip(app):
     client = app.test_client()
     login(client, "bob")
     page = client.get("/garden-helper/").get_data(as_text=True)
-    assert "Hi Bob!" in page and "What&#39;s fresh at the farmstand" in page
+    assert "Hi bob!" in page and "What&#39;s fresh at the farmstand" in page
 
     page = send(client, "When is the farmstand?").get_data(as_text=True)
     assert "When is the farmstand?" in page and "The farmstand is Fridays." in page

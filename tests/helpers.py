@@ -3,6 +3,8 @@ import io
 from datetime import date
 
 from app import create_app
+from auth import create_user
+from conftest import TEST_USERS
 
 TODAY = date(2026, 11, 18)  # a Wednesday; the next farmstand is Friday, Nov 20
 NEXT_FRIDAY = "2026-11-20"
@@ -13,8 +15,10 @@ JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
 
 
 def make_app(tmp_path, **config):
-    return create_app({
+    """An app with the test accounts (alice is the garden manager)."""
+    app = create_app({
         "TESTING": True,
+        "WTF_CSRF_ENABLED": False,
         "SECRET_KEY": "test",
         "ADMIN_USERNAME": "alice",
         "DATABASE": str(tmp_path / "test.db"),
@@ -22,6 +26,10 @@ def make_app(tmp_path, **config):
         "TODAY": TODAY,
         **config,
     })
+    with app.app_context():
+        for username, password in TEST_USERS.items():
+            create_user(username, password)
+    return app
 
 
 def photo(data=PNG, name="leaf.png"):
@@ -29,9 +37,8 @@ def photo(data=PNG, name="leaf.png"):
 
 
 def login(client, username):
-    passwords = {"alice": "password123", "bob": "builder456", "carol": "garden789"}
-    client.get("/logout")
-    client.post("/login", data={"username": username, "password": passwords[username]})
+    client.post("/logout")
+    client.post("/login", data={"username": username, "password": TEST_USERS[username]})
 
 
 def uploaded_files(tmp_path):

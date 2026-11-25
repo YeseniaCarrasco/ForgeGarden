@@ -50,6 +50,7 @@
             <span class="muted-small">Pick up at the farmstand</span>
           </div>
           <form method="post" action="{{ url_for('farmstand.cancel', day=day.isoformat()) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="next" value="{{ url_for('dashboard') }}">
             <button type="submit" class="link-button">Cancel</button>
           </form>

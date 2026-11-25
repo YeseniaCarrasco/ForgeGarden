@@ -2,10 +2,9 @@
 
 Pages: About, Volunteer Calendar (with compost route sign-ups), Plant Help
 board (with photos and the AI Plant Doctor), Garden Journal, Friday Farmstand
-(harvest list and produce box reservations), Garden Helper AI chat, login,
-and dashboard.
-board, Garden Journal, register, login, and dashboard. Everything except
-About, Login, and Register requires login.
+(harvest list and produce box reservations), Garden Helper AI chat, register,
+login, and dashboard. Everything except About, Login, and Register requires
+login.
 """
 import os
 import sqlite3
@@ -70,7 +69,6 @@ def create_app(test_config=None):
     # only when a Google Cloud project is set.
     app.config["VERTEX_PROJECT_ID"] = os.environ.get("VERTEX_PROJECT_ID", "").strip()
     app.config["VERTEX_REGION"] = os.environ.get("VERTEX_REGION", "").strip() or "global"
-    # Don't send the session cookie on cross-site form posts.
     # Keep the session cookie away from JavaScript and cross-site form posts.
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"

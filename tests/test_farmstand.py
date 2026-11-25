@@ -16,7 +16,13 @@ def reserve(client, day=NEXT_FRIDAY):
     return client.post(f"/farmstand/{day}/reserve", follow_redirects=True).get_data(as_text=True)
 
 
-def test_page_is_public_and_shows_next_friday(client):
+def test_page_requires_login(client):
+    r = client.get("/farmstand/")
+    assert r.status_code == 302 and "/login" in r.headers["Location"]
+
+
+def test_page_shows_next_friday(client):
+    login(client, "bob")
     page = client.get("/farmstand/").get_data(as_text=True)
     assert "Friday, November 20, 2026" in page
     assert "Next farmstand" in page
@@ -25,6 +31,7 @@ def test_page_is_public_and_shows_next_friday(client):
 
 
 def test_any_date_shows_that_weeks_farmstand(client):
+    login(client, "bob")
     page = client.get("/farmstand/?day=2026-11-23").get_data(as_text=True)
     assert "Friday, November 27, 2026" in page
 
@@ -83,7 +90,7 @@ def test_reservations_respect_box_limit(client):
 
     login(client, "alice")
     page = client.get("/farmstand/").get_data(as_text=True)
-    assert "Reservations (1)" in page and "Carol Gardener" in page
+    assert "Reservations (1)" in page and "<li>carol</li>" in page
 
 
 def test_no_reservations_when_no_boxes_offered(client):
@@ -137,9 +144,6 @@ def test_cancel_does_not_redirect_off_site(client):
     assert "evil.example.com" not in r.headers["Location"]
 
 
-def test_logged_out_visitor_is_asked_to_log_in(client):
-    login(client, "alice")
-    set_boxes(client, 3)
-    client.get("/logout")
-    assert "Log in to reserve a box" in client.get("/farmstand/").get_data(as_text=True)
-    assert client.post(f"/farmstand/{NEXT_FRIDAY}/reserve").status_code == 302
+def test_logged_out_visitor_cannot_reserve(client):
+    r = client.post(f"/farmstand/{NEXT_FRIDAY}/reserve")
+    assert r.status_code == 302 and "/login" in r.headers["Location"]
