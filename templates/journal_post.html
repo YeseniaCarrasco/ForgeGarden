@@ -9,7 +9,7 @@
     <div class="post-meta"><span class="tag {{ post.kind }}">{{ kinds[post.kind] }}</span></div>
     <h1>{{ post.title }}</h1>
     <p class="byline">
-      {{ display_name(post.username) }} <span class="tag manager">Garden Manager</span>
+      {{ post.username }} <span class="tag manager">Garden Manager</span>
       · {{ post.created_at|short_date }}{% if post.updated_at %} · edited {{ post.updated_at|short_date }}{% endif %}
     </p>
 
@@ -37,6 +37,7 @@
       <a class="button small ghost" href="{{ url_for('journal.edit', pid=post.id) }}">Edit</a>
       <form method="post" action="{{ url_for('journal.delete', pid=post.id) }}"
             onsubmit="return confirm('Delete this journal post?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="link-button">Delete</button>
       </form>
     </div>

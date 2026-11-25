@@ -12,6 +12,7 @@
     <p class="notice">{{ closed_reason }}</p>
   {% else %}
     <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       {% if first_time %}
         <p class="notice">
           This is your first compost route, so you'll need a training day first.
