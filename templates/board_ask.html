@@ -10,6 +10,8 @@
   {% include "_form_errors.html" %}
 
   <form method="post" enctype="multipart/form-data">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="topic">Topic</label>
     <select id="topic" name="topic" required>
       <option value="">Choose a topic…</option>

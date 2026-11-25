@@ -3,20 +3,13 @@ from datetime import date, time
 import pytest
 
 import volunteer
-from app import create_app
 
 TODAY = date(2026, 11, 11)  # a Wednesday
 
 
 @pytest.fixture
-def client(tmp_path):
-    app = create_app({
-        "TESTING": True,
-        "SECRET_KEY": "test",
-        "DATABASE": str(tmp_path / "test.db"),
-        "TODAY": TODAY,
-    })
-    return app.test_client()
+def client(make_client):
+    return make_client(TODAY=TODAY)
 
 
 def login(client, username="alice", password="password123"):
@@ -90,18 +83,25 @@ def test_layout_stacks_overlapping_blocks():
 
 # ---- calendar page ----
 
-def test_calendar_is_public(client):
+def test_calendar_requires_login(client):
+    resp = client.get("/calendar")
+    assert resp.status_code == 302
+    assert "/login?next=" in resp.headers["Location"]
+
+
+def test_calendar_page(client):
+    login(client)
     resp = client.get("/calendar")
     assert resp.status_code == 200
     page = resp.get_data(as_text=True)
     for text in ["November 8–14, 2026", "Glean Team", "Garden Work", "Farmstand Harvest",
-                 "Nourish Night Prep", "Compost Route", "no volunteers needed",
-                 "asked to log in"]:
+                 "Nourish Night Prep", "Compost Route", "no volunteers needed"]:
         assert text in page
     assert page.count('href="/calendar/compost/') == 4  # Wed 11 – Sat 14
 
 
 def test_calendar_week_param(client):
+    login(client)
     page = client.get("/calendar?week=2026-12-01").get_data(as_text=True)
     assert "Nov 29 – Dec 5, 2026" in page
     assert "Jump to this week" in page
@@ -109,6 +109,7 @@ def test_calendar_week_param(client):
 
 
 def test_calendar_bad_month_falls_back(client):
+    login(client)
     assert "November 8–14, 2026" in client.get("/calendar?week=nope").get_data(as_text=True)
 
 
@@ -161,7 +162,7 @@ def test_returning_volunteer_skips_training(client):
 def test_one_volunteer_per_day(client):
     login(client)
     sign_up(client, "2026-11-20", training="2026-11-13")
-    client.get("/logout")
+    client.post("/logout")
     login(client, "bob", "builder456")
     assert b"Filled" in client.get("/calendar?week=2026-11-20").data
     assert b"already signed up" in client.get("/calendar/compost/2026-11-20").data

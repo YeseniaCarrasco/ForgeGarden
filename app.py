@@ -4,6 +4,8 @@ Pages: About, Volunteer Calendar (with compost route sign-ups), Plant Help
 board (with photos and the AI Plant Doctor), Garden Journal, Friday Farmstand
 (harvest list and produce box reservations), Garden Helper AI chat, login,
 and dashboard.
+board, Garden Journal, register, login, and dashboard. Everything except
+About, Login, and Register requires login.
 """
 import os
 import sqlite3
@@ -13,7 +15,7 @@ from dotenv import load_dotenv
 from flask import (
     Flask, abort, flash, redirect, render_template, request, session, url_for,
 )
-from werkzeug.security import check_password_hash
+from flask_wtf.csrf import CSRFProtect
 
 import board
 import chatbot
@@ -22,10 +24,21 @@ import farmstand
 import journal
 import storage
 import volunteer
-from auth import SAMPLE_USERS, USERS, display_name, is_admin, login_required, role_for
+from auth import (
+    check_login, create_user, get_user, is_admin, login_required, normalize_username,
+    redirect_to_login, role_for, validate_registration,
+)
 from db import close_db, current_date, get_db
 
 load_dotenv()
+
+csrf = CSRFProtect()
+
+# Settings that must come from the environment (.env). There are no defaults.
+REQUIRED_SETTINGS = ("SECRET_KEY", "ADMIN_USERNAME")
+
+# Endpoints anyone can open without logging in. "static" serves the CSS.
+PUBLIC_ENDPOINTS = {"about", "about_alias", "login", "register", "static"}
 
 
 def parse_day(text):
@@ -35,10 +48,18 @@ def parse_day(text):
         abort(404)
 
 
+def safe_next_url():
+    """The ?next= path, if it is a local path (avoids open redirects)."""
+    next_url = request.args.get("next", "")
+    if next_url.startswith("/") and not next_url.startswith("//"):
+        return next_url
+    return None
+
+
 def create_app(test_config=None):
     app = Flask(__name__)
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or "dev-only-change-me"
-    app.config["ADMIN_USERNAME"] = os.environ.get("ADMIN_USERNAME", "").strip().lower()
+    for name in REQUIRED_SETTINGS:
+        app.config[name] = os.environ.get(name, "")
     app.config["SITE_NAME"] = os.environ.get("SITE_NAME") or "Forge Garden"
     app.config["DATABASE"] = os.path.join(app.root_path, "forge.db")
     # Photos: a Google Cloud Storage bucket if GCS_BUCKET is set, else this local folder.
@@ -50,10 +71,23 @@ def create_app(test_config=None):
     app.config["VERTEX_PROJECT_ID"] = os.environ.get("VERTEX_PROJECT_ID", "").strip()
     app.config["VERTEX_REGION"] = os.environ.get("VERTEX_REGION", "").strip() or "global"
     # Don't send the session cookie on cross-site form posts.
+    # Keep the session cookie away from JavaScript and cross-site form posts.
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    # Cloud Run sets K_SERVICE and serves over HTTPS; local dev is plain HTTP.
+    app.config["SESSION_COOKIE_SECURE"] = bool(os.environ.get("K_SERVICE"))
     if test_config:
         app.config.update(test_config)
 
+    for name in REQUIRED_SETTINGS:
+        if not str(app.config.get(name) or "").strip():
+            raise RuntimeError(
+                f"{name} is not set. Add {name}=... to .env (or the environment) "
+                "and start the app again."
+            )
+    app.config["ADMIN_USERNAME"] = normalize_username(app.config["ADMIN_USERNAME"])
+
+    csrf.init_app(app)
     app.teardown_appcontext(close_db)
     app.add_template_filter(volunteer.long_date, "long_date")
     app.add_template_filter(content.paragraphs, "paragraphs")
@@ -77,9 +111,20 @@ def create_app(test_config=None):
     def inject_globals():
         return {
             "site_name": app.config["SITE_NAME"],
-            "display_name": display_name,
             "is_admin": is_admin,
         }
+
+    @app.before_request
+    def require_login():
+        username = session.get("username")
+        if username and get_user(username) is None:
+            session.clear()  # the account no longer exists
+        # endpoint is None for unknown URLs; let those 404 normally.
+        if request.endpoint is None or request.endpoint in PUBLIC_ENDPOINTS:
+            return None
+        if "username" not in session:
+            return redirect_to_login()
+        return None
 
     @app.route("/")
     def about():
@@ -89,24 +134,36 @@ def create_app(test_config=None):
     def about_alias():
         return redirect(url_for("about"))
 
+    @app.route("/register", methods=["GET", "POST"])
+    def register():
+        errors, username = [], ""
+        if request.method == "POST":
+            username = normalize_username(request.form.get("username"))
+            password = request.form.get("password", "")
+            errors = validate_registration(username, password, request.form.get("confirm", ""))
+            if not errors and not create_user(username, password):
+                errors.append("That username is taken. Please choose another.")
+            if not errors:
+                session.clear()
+                session["username"] = username
+                flash(f"Welcome, {username}! Your account is ready.", "success")
+                return redirect(safe_next_url() or url_for("dashboard"))
+        return render_template(
+            "register.html", errors=errors, username=username,
+        ), (400 if errors else 200)
+
     @app.route("/login", methods=["GET", "POST"])
     def login():
         if request.method == "POST":
-            username = request.form.get("username", "").strip().lower()
-            password = request.form.get("password", "")
-            user = USERS.get(username)
-            if user and check_password_hash(user["password_hash"], password):
+            username = normalize_username(request.form.get("username"))
+            user = check_login(username, request.form.get("password", ""))
+            if user:
                 session.clear()
-                session["username"] = username
-                flash(f"Welcome back, {user['name']}!", "success")
-                next_url = request.args.get("next", "")
-                # Only allow local paths to avoid open redirects.
-                if next_url.startswith("/") and not next_url.startswith("//"):
-                    return redirect(next_url)
-                return redirect(url_for("dashboard"))
+                session["username"] = user["username"]
+                flash(f"Welcome back, {user['username']}!", "success")
+                return redirect(safe_next_url() or url_for("dashboard"))
             flash("Invalid username or password.", "error")
-        samples = {u: {**info, "role": role_for(u)} for u, info in SAMPLE_USERS.items()}
-        return render_template("login.html", sample_users=samples)
+        return render_template("login.html")
 
     @app.route("/dashboard")
     @login_required
@@ -135,7 +192,6 @@ def create_app(test_config=None):
         return render_template(
             "dashboard.html",
             username=username,
-            user=USERS[username],
             role=role_for(username),
             signups=signups,
             boxes=boxes,
@@ -266,7 +322,7 @@ def create_app(test_config=None):
                 flash("You weren't signed up for that route.", "error")
         return redirect(url_for("dashboard"))
 
-    @app.route("/logout")
+    @app.route("/logout", methods=["POST"])
     def logout():
         session.clear()
         flash("You have been logged out.", "success")
@@ -278,4 +334,4 @@ def create_app(test_config=None):
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run()

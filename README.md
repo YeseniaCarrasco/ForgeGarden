@@ -10,6 +10,11 @@ A Flask web app for Santa Clara University's Forge Garden. It has:
 - A **Garden Journal**, a blog where the garden manager shares thoughts and readings about the garden and the environment, with optional photos.
 - The **Garden Helper**, an AI chatbot (Claude) that answers questions about volunteering, the farmstand, the garden, and organic growing.
 - A **Friday Farmstand** page showing what's freshly harvested each week (with photos), where students can reserve a produce box.
+- **Accounts**: anyone can register with a username and password, then log in. Every page except About, Login, and Register requires login.
+- A **Volunteer Calendar**: a week-by-week grid (9am–6pm) showing drop-in volunteer hours, sign-up shifts, and garden events.
+- **Compost route sign-ups**, with a training day required the first time.
+- **Plant Help**, a community question-and-answer board for plant problems like wilting or pests. Logged-in users can read, ask, and answer.
+- A **Garden Journal**, a blog where the garden manager shares thoughts and readings about the garden and the environment.
 - A **dashboard** where logged-in volunteers can see and cancel their upcoming sign-ups.
 
 ## Setup
@@ -32,8 +37,8 @@ Requires Python 3.10 or newer.
 
    | Variable         | What it does                                                                             |
    | ---------------- | ---------------------------------------------------------------------------------------- |
-   | `SECRET_KEY`     | Signs session cookies. If empty, the app falls back to an insecure dev-only key.         |
-   | `ADMIN_USERNAME` | Which sample user is the admin / garden manager (for example `alice`). Everyone else is `user`. |
+   | `SECRET_KEY`     | Signs session cookies and CSRF tokens. **Required**: the app won't start without it.    |
+   | `ADMIN_USERNAME` | The username of the admin / garden manager. Everyone else is `user`. **Required**: the app won't start without it. |
    | `SITE_NAME`      | Name shown in the page header. Defaults to `Forge Garden`.                               |
    | `VERTEX_PROJECT_ID` | Optional. Google Cloud project used to call Claude through Vertex AI. Turns on the Plant Doctor and the Garden Helper chat. Leave empty to turn them off. See [AI setup](#ai-setup-claude-on-vertex-ai). |
    | `VERTEX_REGION`  | Vertex AI region for Claude. Defaults to `global`. |
@@ -44,6 +49,8 @@ Requires Python 3.10 or newer.
        .venv/bin/python -c "import secrets; print(secrets.token_hex(32))"
 
    `.env` is listed in `.gitignore`. Don't commit it.
+
+   The admin is whoever has the `ADMIN_USERNAME` account, so register that username yourself right after setting up a new deployment.
 
 ## Running the app
 
@@ -57,27 +64,28 @@ The app stores compost route sign-ups, Plant Help posts, journal posts, and farm
 
 ## Sample users
 
-These accounts exist for development only. Their passwords are also shown on the login page.
+## Accounts and security
 
-| Username | Name           | Password      |
-| -------- | -------------- | ------------- |
-| `alice`  | Alice Anvil    | `password123` |
-| `bob`    | Bob Builder    | `builder456`  |
-| `carol`  | Carol Gardener | `garden789`   |
+- Register at `/register`. Usernames are 3–32 characters (letters, numbers, dots, dashes, underscores) and are not case-sensitive. Passwords need at least 8 characters.
+- Only Werkzeug password hashes are stored in the `users` table, never the passwords themselves.
+- The session cookie is `HttpOnly` and `SameSite=Lax`. It's also `Secure` when running on Cloud Run (when `K_SERVICE` is set).
+- Every POST form includes a CSRF token (Flask-WTF `CSRFProtect`). Log out is a POST button on the dashboard.
 
 ## Pages
 
 | Route                               | Login required | Description                                                         |
 | ----------------------------------- | -------------- | ------------------------------------------------------------------- |
 | `/`                                 | No             | About the Forge Garden. (`/about` redirects here.)                  |
-| `/calendar`                         | No             | Volunteer Calendar for the current week (Sunday–Saturday). `?week=2026-12-01` shows the week containing that date. |
+| `/register`                         | No             | Create an account.                                                  |
+| `/login`                            | No             | Login form.                                                         |
+| `/calendar`                         | Yes            | Volunteer Calendar for the current week (Sunday–Saturday). `?week=2026-12-01` shows the week containing that date. |
 | `/calendar/compost/<YYYY-MM-DD>`    | Yes            | Sign up to run the compost route on that day.                       |
 | `/calendar/compost/<YYYY-MM-DD>/cancel` | Yes (POST) | Cancel your own upcoming sign-up.                                   |
-| `/plant-help/`                      | No             | Plant Help board. `?topic=pests` filters by topic.                  |
+| `/plant-help/`                      | Yes            | Plant Help board. `?topic=pests` filters by topic.                  |
 | `/plant-help/ask`                   | Yes            | Ask a question.                                                     |
-| `/plant-help/<id>`                  | No             | A question and its answers. Logged-in users can answer.             |
-| `/journal/`                         | No             | Garden Journal. `?kind=thought` or `?kind=reading` filters by type.  |
-| `/journal/<id>`                     | No             | A single journal post.                                              |
+| `/plant-help/<id>`                  | Yes            | A question and its answers.                                         |
+| `/journal/`                         | Yes            | Garden Journal. `?kind=thought` or `?kind=reading` filters by type.  |
+| `/journal/<id>`                     | Yes            | A single journal post.                                              |
 | `/journal/new`, `/journal/<id>/edit`| Admin only     | Write or edit a journal post.                                       |
 | `/farmstand/`                       | No             | This week's farmstand: harvest list and produce boxes. `?day=2026-12-01` shows the farmstand in that date's week. |
 | `/farmstand/<YYYY-MM-DD>/reserve`, `/cancel` | Yes (POST) | Reserve or cancel your produce box for that Friday.          |
@@ -87,6 +95,10 @@ These accounts exist for development only. Their passwords are also shown on the
 | `/login`                            | No             | Login form.                                                         |
 | `/dashboard`                        | Yes            | Your name, role, and upcoming compost routes.                       |
 | `/logout`                           | No             | Logs out and returns to the homepage.                               |
+| `/dashboard`                        | Yes            | Your username, role, and upcoming compost routes.                   |
+| `/logout`                           | Yes (POST)     | Logs out and returns to the homepage.                               |
+
+Logged-out visitors who open a login-required page are sent to `/login?next=<page>` and return there after logging in.
 
 ## Volunteer schedule
 
@@ -95,7 +107,7 @@ Each week is shown as a grid with one column per day and a 9am–6pm time axis. 
 The calendar color-codes three kinds of opportunities:
 
 - **Green: drop-in hours.** Just show up, no sign-up needed.
-- **Purple: sign-up required.** Log in and claim the shift.
+- **Purple: sign-up required.** Claim the shift.
 - **Blue: garden events.** Shown for reference; no volunteers needed.
 
 | When       | Opportunity        | Time            | Kind      | Notes                                                                 |
@@ -163,7 +175,7 @@ If sign-in or the API call fails, the app keeps working: questions post without 
 
 ## Garden Journal
 
-- Only the garden manager (the `ADMIN_USERNAME` user) can write, edit, or delete posts. Everyone can read them.
+- Only the garden manager (the `ADMIN_USERNAME` user) can write, edit, or delete posts. Every logged-in user can read them.
 - Each post is a **Thought** or a **Reading**. A post can include an optional reading title and link (`http://` or `https://` only).
 - The journal is meant for longer-form posts and is separate from any future announcements page.
 
@@ -190,9 +202,9 @@ Posts on both pages are plain text: any HTML is shown as text, not rendered. Lea
 
 ## Project structure
 
-    app.py              Flask app setup, About/login/dashboard, calendar routes
-    auth.py             Sample users, login_required / admin_required, roles
-    db.py               SQLite connection and table definitions
+    app.py              Flask app setup, settings, About/register/login/dashboard, calendar routes
+    auth.py             Accounts, password checks, login_required / admin_required, roles
+    db.py               SQLite connection and table definitions (including users)
     volunteer.py        Volunteer schedule data and calendar helpers
     board.py            Plant Help board routes
     journal.py          Garden Journal routes
@@ -211,3 +223,4 @@ Posts on both pages are plain text: any HTML is shown as text, not rendered. Lea
     .venv/bin/pytest
 
 Tests never call the real Anthropic API or Google Cloud (the Plant Doctor and Garden Helper tests use a fake client). Tests use a temporary database, a temporary photo folder, and a fixed "today" date (`TODAY` in the app config), so they don't touch `forge.db` and give the same results on any day.
+Tests use a temporary database and a fixed "today" date (`TODAY` in the app config), so they don't touch `forge.db` and give the same results on any day. They use their own test `SECRET_KEY` and `ADMIN_USERNAME` (not `.env`), create test accounts in the temporary database, and turn CSRF off except in the tests that check it.
