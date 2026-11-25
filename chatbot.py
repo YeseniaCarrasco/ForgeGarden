@@ -6,8 +6,8 @@ this week's farmstand listing, which are put into the prompt on every request.
 
 Conversations are saved in the database (one per browser session, until the
 user starts a new chat). Each user can send DAILY_LIMIT messages a day, to keep
-API costs predictable. Claude is called through Google Cloud Vertex AI; the
-chat is on only when VERTEX_PROJECT_ID is set.
+API costs predictable. Claude is called through the Claude API; the chat is
+on only when ANTHROPIC_API_KEY is set.
 """
 import uuid
 
@@ -20,7 +20,7 @@ import plant_doctor
 import volunteer
 from auth import login_required
 from content import clean
-from db import current_date, get_db
+from db import TODAY_TEXT, current_date, get_db
 
 bp = Blueprint("chat", __name__, url_prefix="/garden-helper")
 
@@ -111,11 +111,11 @@ def this_week_text():
     today = current_date()
     friday = farmstand.next_farmstand(today)
     items = db.execute(
-        "SELECT name, note FROM harvest_items WHERE farmstand_date = ? ORDER BY id",
+        "SELECT name, note FROM harvest_items WHERE farmstand_date = %s ORDER BY id",
         (friday.isoformat(),),
     ).fetchall()
     note = db.execute(
-        "SELECT note FROM farmstand_days WHERE farmstand_date = ?", (friday.isoformat(),)
+        "SELECT note FROM farmstand_days WHERE farmstand_date = %s", (friday.isoformat(),)
     ).fetchone()
     boxes, reserved = farmstand.box_counts(db, friday)
 
@@ -144,17 +144,17 @@ def conversation_id():
 
 def load_messages(chat_id):
     return get_db().execute(
-        "SELECT role, content FROM chat_messages WHERE conversation_id = ? ORDER BY id",
+        "SELECT role, content FROM chat_messages WHERE conversation_id = %s ORDER BY id",
         (chat_id,),
     ).fetchall()
 
 
 def messages_sent_today(username):
     return get_db().execute(
-        "SELECT COUNT(*) FROM chat_messages WHERE username = ? AND role = 'user'"
-        " AND date(created_at) = date('now')",
+        "SELECT COUNT(*) AS n FROM chat_messages WHERE username = %s AND role = 'user'"
+        f" AND left(created_at, 10) = {TODAY_TEXT}",
         (username,),
-    ).fetchone()[0]
+    ).fetchone()["n"]
 
 
 def ask_claude(history):
@@ -170,13 +170,13 @@ def ask_claude(history):
             messages=[{"role": m["role"], "content": m["content"]} for m in history],
             output_config={"effort": "low"},
         )
-    except plant_doctor.ai_errors():
+        if response.stop_reason == "refusal":
+            return ("Sorry, I can't help with that. I can answer questions about the "
+                    "Forge Garden, volunteering, the farmstand, and organic gardening.")
+        text = "".join(b.text for b in response.content if b.type == "text").strip()
+    except Exception:  # any failure: the user sees "couldn't answer just now"
         current_app.logger.warning("Garden Helper request failed", exc_info=True)
         return None
-    if response.stop_reason == "refusal":
-        return ("Sorry, I can't help with that. I can answer questions about the "
-                "Forge Garden, volunteering, the farmstand, and organic gardening.")
-    text = "".join(b.text for b in response.content if b.type == "text").strip()
     return text or None
 
 
@@ -199,7 +199,7 @@ def index():
             db = get_db()
             db.execute(
                 "INSERT INTO chat_messages (conversation_id, username, role, content)"
-                " VALUES (?, ?, 'user', ?)", (chat_id, username, message),
+                " VALUES (%s, %s, 'user', %s)", (chat_id, username, message),
             )
             db.commit()
             history = list(load_messages(chat_id)[-HISTORY_MESSAGES:])
@@ -211,7 +211,7 @@ def index():
             else:
                 db.execute(
                     "INSERT INTO chat_messages (conversation_id, username, role, content)"
-                    " VALUES (?, ?, 'assistant', ?)", (chat_id, username, reply),
+                    " VALUES (%s, %s, 'assistant', %s)", (chat_id, username, reply),
                 )
                 db.commit()
         return redirect(url_for("chat.index") + "#latest")

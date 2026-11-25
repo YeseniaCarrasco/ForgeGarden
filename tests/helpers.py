@@ -4,7 +4,7 @@ from datetime import date
 
 from app import create_app
 from auth import create_user
-from conftest import TEST_USERS
+from conftest import TEST_DATABASE_URL, TEST_USERS
 
 TODAY = date(2026, 11, 18)  # a Wednesday; the next farmstand is Friday, Nov 20
 NEXT_FRIDAY = "2026-11-20"
@@ -21,7 +21,7 @@ def make_app(tmp_path, **config):
         "WTF_CSRF_ENABLED": False,
         "SECRET_KEY": "test",
         "ADMIN_USERNAME": "alice",
-        "DATABASE": str(tmp_path / "test.db"),
+        "DATABASE_URL": TEST_DATABASE_URL,
         "UPLOAD_FOLDER": str(tmp_path / "uploads"),
         "TODAY": TODAY,
         **config,

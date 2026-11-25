@@ -7,7 +7,6 @@ login, and dashboard. Everything except About, Login, and Register requires
 login.
 """
 import os
-import sqlite3
 from datetime import date, timedelta
 
 from dotenv import load_dotenv
@@ -27,14 +26,14 @@ from auth import (
     check_login, create_user, get_user, is_admin, login_required, normalize_username,
     redirect_to_login, role_for, validate_registration,
 )
-from db import close_db, current_date, get_db
+from db import IntegrityError, close_db, current_date, get_db, init_db
 
 load_dotenv()
 
 csrf = CSRFProtect()
 
 # Settings that must come from the environment (.env). There are no defaults.
-REQUIRED_SETTINGS = ("SECRET_KEY", "ADMIN_USERNAME")
+REQUIRED_SETTINGS = ("SECRET_KEY", "ADMIN_USERNAME", "DATABASE_URL")
 
 # Endpoints anyone can open without logging in. "static" serves the CSS.
 PUBLIC_ENDPOINTS = {"about", "about_alias", "login", "register", "static"}
@@ -60,15 +59,12 @@ def create_app(test_config=None):
     for name in REQUIRED_SETTINGS:
         app.config[name] = os.environ.get(name, "")
     app.config["SITE_NAME"] = os.environ.get("SITE_NAME") or "Forge Garden"
-    app.config["DATABASE"] = os.path.join(app.root_path, "forge.db")
     # Photos: a Google Cloud Storage bucket if GCS_BUCKET is set, else this local folder.
     app.config["GCS_BUCKET"] = os.environ.get("GCS_BUCKET", "").strip()
     app.config["UPLOAD_FOLDER"] = os.path.join(app.instance_path, "uploads")
     app.config["MAX_CONTENT_LENGTH"] = storage.MAX_PHOTO_BYTES + 1024 * 1024
-    # Plant Doctor and Garden Helper (Claude on Google Cloud Vertex AI) are on
-    # only when a Google Cloud project is set.
-    app.config["VERTEX_PROJECT_ID"] = os.environ.get("VERTEX_PROJECT_ID", "").strip()
-    app.config["VERTEX_REGION"] = os.environ.get("VERTEX_REGION", "").strip() or "global"
+    # Plant Doctor and Garden Helper (Claude API) are on only when this key is set.
+    app.config["ANTHROPIC_API_KEY"] = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     # Keep the session cookie away from JavaScript and cross-site form posts.
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -84,6 +80,7 @@ def create_app(test_config=None):
                 "and start the app again."
             )
     app.config["ADMIN_USERNAME"] = normalize_username(app.config["ADMIN_USERNAME"])
+    init_db(app.config["DATABASE_URL"])  # create any missing tables
 
     csrf.init_app(app)
     app.teardown_appcontext(close_db)
@@ -169,14 +166,14 @@ def create_app(test_config=None):
         username = session["username"]
         rows = get_db().execute(
             "SELECT route_date, training_date FROM compost_signups"
-            " WHERE username = ? AND route_date >= ? ORDER BY route_date",
+            " WHERE username = %s AND route_date >= %s ORDER BY route_date",
             (username, current_date().isoformat()),
         ).fetchall()
         boxes = [
             date.fromisoformat(r["farmstand_date"])
             for r in get_db().execute(
                 "SELECT farmstand_date FROM box_reservations"
-                " WHERE username = ? AND farmstand_date >= ? ORDER BY farmstand_date",
+                " WHERE username = %s AND farmstand_date >= %s ORDER BY farmstand_date",
                 (username, current_date().isoformat()),
             )
         ]
@@ -207,7 +204,7 @@ def create_app(test_config=None):
         dates = [start + timedelta(days=i) for i in range(7)]
         rows = get_db().execute(
             "SELECT route_date, username FROM compost_signups"
-            " WHERE route_date BETWEEN ? AND ?",
+            " WHERE route_date BETWEEN %s AND %s",
             (dates[0].isoformat(), dates[-1].isoformat()),
         ).fetchall()
         days = []
@@ -237,11 +234,11 @@ def create_app(test_config=None):
         username = session["username"]
         db = get_db()
         taken = db.execute(
-            "SELECT username FROM compost_signups WHERE route_date = ?",
+            "SELECT username FROM compost_signups WHERE route_date = %s",
             (route_day.isoformat(),),
         ).fetchone()
         first_time = db.execute(
-            "SELECT 1 FROM compost_signups WHERE username = ? LIMIT 1", (username,)
+            "SELECT 1 FROM compost_signups WHERE username = %s LIMIT 1", (username,)
         ).fetchone() is None
         latest_training = route_day - timedelta(days=1)
 
@@ -276,12 +273,13 @@ def create_app(test_config=None):
                 try:
                     db.execute(
                         "INSERT INTO compost_signups (route_date, username, training_date)"
-                        " VALUES (?, ?, ?)",
+                        " VALUES (%s, %s, %s)",
                         (route_day.isoformat(), username,
                          training_day and training_day.isoformat()),
                     )
                     db.commit()
-                except sqlite3.IntegrityError:
+                except IntegrityError:  # UNIQUE route_date: someone else got it first
+                    db.rollback()
                     error = "Someone just signed up for this route. Please pick another day."
                 else:
                     flash(
@@ -310,7 +308,7 @@ def create_app(test_config=None):
         else:
             db = get_db()
             deleted = db.execute(
-                "DELETE FROM compost_signups WHERE route_date = ? AND username = ?",
+                "DELETE FROM compost_signups WHERE route_date = %s AND username = %s",
                 (route_day.isoformat(), session["username"]),
             ).rowcount
             db.commit()

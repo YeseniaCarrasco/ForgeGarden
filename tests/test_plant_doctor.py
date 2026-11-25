@@ -35,7 +35,7 @@ class FakeMessages:
 
 @pytest.fixture
 def ai_app(tmp_path):
-    return make_app(tmp_path, VERTEX_PROJECT_ID="test-project")
+    return make_app(tmp_path, ANTHROPIC_API_KEY="test-key")
 
 
 def use_fake(app, messages):
@@ -86,11 +86,12 @@ def test_question_still_posts_when_ai_fails(ai_app):
     assert "Bugs on my roses" in client.get("/plant-help/?topic=other").get_data(as_text=True)
 
 
-def test_plant_doctor_off_without_vertex_project(tmp_path):
+def test_plant_doctor_off_without_api_key(tmp_path):
     client = make_app(tmp_path).test_client()
     login(client, "bob")
     form = client.get("/plant-help/ask").get_data(as_text=True)
-    assert "Not sure" in form and "Plant Doctor" not in form
+    assert "Not sure" in form and "Plant Doctor will suggest" not in form
+    assert "Plant Doctor isn't available right now" in form
     ask(client, topic="auto")
     assert "AI-generated draft" not in client.get("/plant-help/1").get_data(as_text=True)
 
@@ -103,7 +104,7 @@ def test_ai_draft_is_deleted_with_question(ai_app):
     client.post("/plant-help/1/delete")
     with ai_app.app_context():
         from db import get_db
-        assert get_db().execute("SELECT COUNT(*) FROM plant_doctor").fetchone()[0] == 0
+        assert get_db().execute("SELECT COUNT(*) AS n FROM plant_doctor").fetchone()["n"] == 0
 
 
 # ---- The request sent to Claude ----
@@ -115,7 +116,7 @@ def test_request_includes_photo_question_and_organic_rules(ai_app):
     ask(client, photo=photo())
 
     [req] = fake.requests
-    assert req["model"] == "claude-opus-5-5"
+    assert req["model"] == "claude-sonnet-5-5"
     assert "CCOF" in req["system"] and "Never suggest synthetic" in req["system"]
     image, text = req["messages"][0]["content"]
     assert image["source"]["media_type"] == "image/png"
@@ -124,7 +125,9 @@ def test_request_includes_photo_question_and_organic_rules(ai_app):
     schema = req["output_config"]["format"]["schema"]
     assert schema["additionalProperties"] is False
     assert schema["properties"]["topic"]["enum"] == ["wilting", "pests", "disease", "soil", "watering", "other"]
-    assert "fallbacks" not in req  # not supported on Vertex; the SDK middleware handles it
+    assert req["fallbacks"] == "default"  # server-side refusal fallback, chosen by the API
+    assert req["betas"] == ["server-side-fallback-2026-07-01"]
+    assert req["output_config"]["effort"] == "medium"
 
 
 @pytest.mark.parametrize("reply, stop_reason", [
@@ -139,30 +142,65 @@ def test_unusable_responses_are_ignored(ai_app, reply, stop_reason):
         assert plant_doctor.diagnose("Title", "Body") is None
 
 
-# ---- Vertex AI setup ----
+# ---- Claude API setup ----
 
-def test_client_uses_vertex_project_region_and_fallback(tmp_path):
-    from anthropic import AnthropicVertex
+def test_client_uses_api_key_timeout_and_retries(tmp_path):
+    from anthropic import Anthropic
 
-    app = make_app(tmp_path, VERTEX_PROJECT_ID="my-project", VERTEX_REGION="us-east5")
+    app = make_app(tmp_path, ANTHROPIC_API_KEY="test-key")
     with app.app_context():
         client = plant_doctor.get_client()
-        assert isinstance(client, AnthropicVertex)
-        assert client.project_id == "my-project"
-        assert client.region == "us-east5"
+        assert isinstance(client, Anthropic)
+        assert client.api_key == "test-key"
+        assert client.timeout == 60.0
+        assert client.max_retries == 1
         assert plant_doctor.get_client() is client  # one shared client
 
 
-def test_region_defaults_to_global(tmp_path):
-    app = make_app(tmp_path, VERTEX_PROJECT_ID="my-project")
-    assert app.config["VERTEX_REGION"] == "global"
+def test_api_key_comes_from_environment(monkeypatch, tmp_path):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", " env-key ")
+    app = make_app(tmp_path)
+    assert app.config["ANTHROPIC_API_KEY"] == "env-key"
+    with app.app_context():
+        assert plant_doctor.is_enabled()
 
 
-def test_google_sign_in_error_is_handled(ai_app):
-    from google.auth.exceptions import DefaultCredentialsError
+def test_no_vertex_settings_left():
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    for path in [*root.glob("*.py"), *root.glob("templates/*.html"), root / "README.md"]:
+        text = path.read_text()
+        assert "VERTEX" not in text and "AnthropicVertex" not in text, path.name
 
-    use_fake(ai_app, FakeMessages(error=DefaultCredentialsError("not signed in")))
+
+@pytest.mark.parametrize("error", [
+    anthropic.AuthenticationError(
+        "bad key", response=SimpleNamespace(status_code=401, headers={}, request=None), body=None),
+    anthropic.RateLimitError(
+        "slow down", response=SimpleNamespace(status_code=429, headers={}, request=None), body=None),
+    anthropic.APITimeoutError(request=SimpleNamespace(method="POST", url="x")),
+    RuntimeError("something unexpected"),
+])
+def test_any_ai_error_still_posts_question(ai_app, error):
+    use_fake(ai_app, FakeMessages(error=error))
     client = ai_app.test_client()
     login(client, "bob")
     assert ask(client).status_code == 302
-    assert "AI-generated draft" not in client.get("/plant-help/1").get_data(as_text=True)
+    page = client.get("/plant-help/1")
+    assert page.status_code == 200
+    assert "AI-generated draft" not in page.get_data(as_text=True)
+
+
+def test_unreadable_response_is_ignored(ai_app):
+    class Broken(FakeMessages):
+        def create(self, **kwargs):
+            return SimpleNamespace(stop_reason="end_turn", content=None)
+    use_fake(ai_app, Broken())
+    with ai_app.app_context():
+        assert plant_doctor.diagnose("Title", "Body") is None
+
+
+def test_real_api_is_never_called(ai_app):
+    # No fake client: the real SDK client is built, and the test backstop stops the request.
+    with ai_app.app_context():
+        assert plant_doctor.diagnose("Title", "Body") is None

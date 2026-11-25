@@ -32,6 +32,8 @@
     <p class="field-hint">A close-up of the leaves, pests, or mold helps a lot. JPEG, PNG, GIF, or WebP, up to 5 MB.</p>
     {% if plant_doctor_on %}
       <p class="field-hint">🤖 After you post, the Plant Doctor (AI) writes a quick first take while you wait for the garden manager. This can take up to a minute.</p>
+    {% else %}
+      <p class="field-hint">The AI Plant Doctor isn't available right now. The garden manager and community will still answer your question.</p>
     {% endif %}
     <button type="submit" class="purple">Post question</button>
   </form>

@@ -30,21 +30,23 @@ Requires Python 3.10 or newer.
 
        SECRET_KEY=
        ADMIN_USERNAME=
+       DATABASE_URL=
+       TEST_DATABASE_URL=
        SITE_NAME=Forge Garden
-       VERTEX_PROJECT_ID=
-       VERTEX_REGION=global
+       ANTHROPIC_API_KEY=
        GCS_BUCKET=
 
    | Variable         | What it does                                                                             |
    | ---------------- | ---------------------------------------------------------------------------------------- |
    | `SECRET_KEY`     | Signs session cookies and CSRF tokens. **Required**: the app won't start without it.    |
    | `ADMIN_USERNAME` | The username of the admin / garden manager. Everyone else is `user`. **Required**: the app won't start without it. |
+   | `DATABASE_URL`   | PostgreSQL connection string for the app's data (a Neon database, for example `postgresql://user:password@ep-….neon.tech/neondb?sslmode=require`). **Required**: the app won't start without it. |
+   | `TEST_DATABASE_URL` | A **separate** PostgreSQL database used only by the tests. Tests empty every table, so never point this at real data. Tests refuse to run if it's missing or is the same database as `DATABASE_URL`. |
    | `SITE_NAME`      | Name shown in the page header. Defaults to `Forge Garden`.                               |
-   | `VERTEX_PROJECT_ID` | Optional. Google Cloud project used to call Claude through Vertex AI. Turns on the Plant Doctor and the Garden Helper chat. Leave empty to turn them off. See [AI setup](#ai-setup-claude-on-vertex-ai). |
-   | `VERTEX_REGION`  | Vertex AI region for Claude. Defaults to `global`. |
+   | `ANTHROPIC_API_KEY` | Optional. Claude API key. Turns on the Plant Doctor and the Garden Helper chat. Leave empty to turn them off. See [AI setup](#ai-setup-claude-api). |
    | `GCS_BUCKET`     | Optional. Name of a Google Cloud Storage bucket for photos. Leave empty to store photos in `instance/uploads/` instead. |
 
-   Fill in `SECRET_KEY` and `ADMIN_USERNAME` yourself. One way to generate a secret key:
+   Fill in `SECRET_KEY`, `ADMIN_USERNAME`, and `DATABASE_URL` yourself. On Neon, create a second database (or branch) for `TEST_DATABASE_URL`. One way to generate a secret key:
 
        .venv/bin/python -c "import secrets; print(secrets.token_hex(32))"
 
@@ -60,7 +62,7 @@ Then open http://127.0.0.1:5000.
 
 Uploaded photos are saved in `instance/uploads/` (ignored by git) unless `GCS_BUCKET` is set; see [Photos](#photos).
 
-The app stores compost route sign-ups, Plant Help posts, journal posts, and farmstand data in a SQLite database, `forge.db`, in the project folder. It's created automatically the first time it's needed, and any missing tables are added automatically, so an existing `forge.db` keeps working. It's ignored by git. Delete it to start over with no data.
+The app stores accounts, compost route sign-ups, Plant Help posts, journal posts, farmstand data, and Garden Helper chats in the PostgreSQL database at `DATABASE_URL` (using psycopg). Any missing tables are created when the app starts. The old SQLite file, `forge.db`, is no longer used.
 
 ## Sample users
 
@@ -140,38 +142,33 @@ The weekly schedule lives in [`volunteer.py`](volunteer.py). The grid covers `GR
 
 ### Plant Doctor (AI)
 
-When `VERTEX_PROJECT_ID` is set, each new question is sent (with its photo, if any) to Claude (`claude-opus-5-5`), which returns:
+When `ANTHROPIC_API_KEY` is set, each new question is sent (with its photo, if any) to Claude (`claude-sonnet-5-5`), which returns:
 
 - a **suggested topic**. If the asker picks "Not sure", the question is filed under this topic,
 - 1–4 **likely issues**, and
 - an **organic treatment idea** that only uses CCOF-allowed methods.
 
-This shows on the question page in a box clearly labeled as an AI draft, above the community answers. It runs while the question is being posted, so posting takes up to about a minute. If the AI is off or the call fails, the question is posted normally without a draft ("Not sure" questions go under Other). The prompt is in [`plant_doctor.py`](plant_doctor.py). Each question costs a few cents, billed to the Google Cloud project.
+This shows on the question page in a box clearly labeled as an AI draft, above the community answers. It runs while the question is being posted, so posting takes up to about a minute. If the AI is off, the form says the Plant Doctor isn't available right now. If the AI is off or the call fails, the question is posted normally without a draft ("Not sure" questions go under Other). The prompt is in [`plant_doctor.py`](plant_doctor.py). Each question costs a few cents, billed to the Claude API account that owns the key.
 
 ## Garden Helper (AI chat)
 
-A chatbot for logged-in users at `/garden-helper/`, linked in the header and dashboard. It uses Claude (`claude-opus-5-5`) and answers from real site data: every request includes the garden's facts, the weekly volunteer schedule, today's date, and the next farmstand's harvest list, box count, and note. It's told to answer only garden-related questions, use organic methods only, keep replies short, and say so rather than guess when it doesn't know something.
+A chatbot for logged-in users at `/garden-helper/`, linked in the header and dashboard. It uses Claude (`claude-sonnet-5-5`) and answers from real site data: every request includes the garden's facts, the weekly volunteer schedule, today's date, and the next farmstand's harvest list, box count, and note. It's told to answer only garden-related questions, use organic methods only, keep replies short, and say so rather than guess when it doesn't know something.
 
 - Conversations are saved in the `chat_messages` table. Each browser session has its own chat, and only that user can see it. **New chat** starts over.
 - Claude sees the last 20 messages of the conversation.
 - Each user can send 40 messages a day (`DAILY_LIMIT` in [`chatbot.py`](chatbot.py)) to keep API costs predictable. Each message costs a fraction of a cent to a few cents.
 - The prompt and garden facts are in [`chatbot.py`](chatbot.py). Update them there if the garden's details change.
 
-## AI setup (Claude on Vertex AI)
+## AI setup (Claude API)
 
-The Plant Doctor and Garden Helper call Claude through Google Cloud Vertex AI, so there's no Anthropic API key; usage is billed to your Google Cloud project.
+The Plant Doctor and Garden Helper call the Claude API (Claude Sonnet 5.5, `claude-sonnet-5-5`) with an API key. Usage is billed to the Claude API account that owns the key.
 
-1. Turn on the Vertex AI API:
+1. Create an API key in the [Claude Console](https://platform.claude.com/).
+2. Set `ANTHROPIC_API_KEY=...` in `.env` (on Cloud Run, set it as a secret environment variable) and restart the app.
 
-       gcloud services enable aiplatform.googleapis.com --project YOUR-PROJECT
+If a safety check declines a request, the API can retry it on another model in the same call (server-side fallback, `fallbacks: "default"`). For Claude Sonnet 5.5 it retries "cyber" and "frontier_llm" declines on Claude Sonnet 5. Other declines aren't retried: the Plant Doctor then skips its draft, and the Garden Helper replies that it can't help with that. Requests time out after 60 seconds and are retried once.
 
-2. In the Google Cloud console, open **Vertex AI → Model Garden**, find **Claude Opus 5.5** and **Claude Opus 4.8**, and click **Enable** on each (accept the terms). Opus 4.8 is the backup the app retries on if Opus 5.5 declines a request.
-3. Sign in so the app can use your Google account:
-   - Locally: `gcloud auth application-default login`
-   - On Cloud Run: give the service's service account the **Vertex AI User** role.
-4. Set `VERTEX_PROJECT_ID=YOUR-PROJECT` in `.env` and restart the app.
-
-If sign-in or the API call fails, the app keeps working: questions post without an AI draft, and the chat shows a "try again" message.
+Without a key, both features show a "not available right now" message. If a call fails for any reason (bad key, rate limit, timeout, network), the app keeps working: questions post without an AI draft, and the chat shows a "couldn't answer just now, please try again" message.
 
 ## Garden Journal
 
@@ -204,7 +201,7 @@ Posts on both pages are plain text: any HTML is shown as text, not rendered. Lea
 
     app.py              Flask app setup, settings, About/register/login/dashboard, calendar routes
     auth.py             Accounts, password checks, login_required / admin_required, roles
-    db.py               SQLite connection and table definitions (including users)
+    db.py               PostgreSQL connection (psycopg) and table definitions
     volunteer.py        Volunteer schedule data and calendar helpers
     board.py            Plant Help board routes
     journal.py          Garden Journal routes
@@ -222,5 +219,8 @@ Posts on both pages are plain text: any HTML is shown as text, not rendered. Lea
 
     .venv/bin/pytest
 
-Tests never call the real Anthropic API or Google Cloud (the Plant Doctor and Garden Helper tests use a fake client). Tests use a temporary database, a temporary photo folder, and a fixed "today" date (`TODAY` in the app config), so they don't touch `forge.db` and give the same results on any day.
-Tests use a temporary database and a fixed "today" date (`TODAY` in the app config), so they don't touch `forge.db` and give the same results on any day. They use their own test `SECRET_KEY` and `ADMIN_USERNAME` (not `.env`), create test accounts in the temporary database, and turn CSRF off except in the tests that check it.
+Tests never call the real Claude API or Google Cloud. The Plant Doctor and Garden Helper tests use a fake client, `ANTHROPIC_API_KEY` from `.env` is ignored, and any request a real Claude client tries to send is blocked before it leaves the machine.
+
+Tests use the PostgreSQL database in `TEST_DATABASE_URL`, never `DATABASE_URL`. They stop before running anything if `TEST_DATABASE_URL` is missing or points at the same database as `DATABASE_URL` (Neon's pooled and direct hosts for one database count as the same). Every table is emptied before each test.
+
+Tests also use a temporary photo folder and a fixed "today" date (`TODAY` in the app config), so they give the same results on any day. They use their own test `SECRET_KEY` and `ADMIN_USERNAME` (not the ones in `.env`), create test accounts in the test database, and turn CSRF off except in the tests that check it.

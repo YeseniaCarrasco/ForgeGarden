@@ -5,7 +5,6 @@ per farmstand day while boxes are left, and cancel it before the day passes.
 The garden manager (admin) lists harvested items (with optional photos), sets
 how many boxes are available, and sees who reserved one.
 """
-import sqlite3
 from datetime import date, timedelta
 
 from flask import (
@@ -16,7 +15,7 @@ import storage
 import volunteer
 from auth import admin_required, is_admin, login_required
 from content import clean
-from db import current_date, get_db
+from db import IntegrityError, current_date, get_db
 
 bp = Blueprint("farmstand", __name__, url_prefix="/farmstand")
 
@@ -42,11 +41,11 @@ def parse_farmstand_date(text):
 def box_counts(db, day):
     """(boxes offered, boxes reserved) for a farmstand day."""
     row = db.execute(
-        "SELECT boxes FROM farmstand_days WHERE farmstand_date = ?", (day.isoformat(),)
+        "SELECT boxes FROM farmstand_days WHERE farmstand_date = %s", (day.isoformat(),)
     ).fetchone()
     reserved = db.execute(
-        "SELECT COUNT(*) FROM box_reservations WHERE farmstand_date = ?", (day.isoformat(),)
-    ).fetchone()[0]
+        "SELECT COUNT(*) AS n FROM box_reservations WHERE farmstand_date = %s", (day.isoformat(),)
+    ).fetchone()["n"]
     return (row["boxes"] if row else 0), reserved
 
 
@@ -63,22 +62,22 @@ def index():
         day = next_farmstand(today)
     db = get_db()
     settings = db.execute(
-        "SELECT * FROM farmstand_days WHERE farmstand_date = ?", (day.isoformat(),)
+        "SELECT * FROM farmstand_days WHERE farmstand_date = %s", (day.isoformat(),)
     ).fetchone()
     items = db.execute(
-        "SELECT * FROM harvest_items WHERE farmstand_date = ? ORDER BY id", (day.isoformat(),)
+        "SELECT * FROM harvest_items WHERE farmstand_date = %s ORDER BY id", (day.isoformat(),)
     ).fetchall()
     boxes, reserved = box_counts(db, day)
     username = session.get("username")
     mine = username and db.execute(
-        "SELECT 1 FROM box_reservations WHERE farmstand_date = ? AND username = ?",
+        "SELECT 1 FROM box_reservations WHERE farmstand_date = %s AND username = %s",
         (day.isoformat(), username),
     ).fetchone() is not None
     reservations = []
     if is_admin():
         reservations = db.execute(
             "SELECT username, created_at FROM box_reservations"
-            " WHERE farmstand_date = ? ORDER BY id", (day.isoformat(),),
+            " WHERE farmstand_date = %s ORDER BY id", (day.isoformat(),),
         ).fetchall()
     return render_template(
         "farmstand.html",
@@ -108,22 +107,27 @@ def reserve(day):
         return back(day)
     db = get_db()
     already = db.execute(
-        "SELECT 1 FROM box_reservations WHERE farmstand_date = ? AND username = ?",
+        "SELECT 1 FROM box_reservations WHERE farmstand_date = %s AND username = %s",
         (day.isoformat(), session["username"]),
     ).fetchone()
     if already:
         flash("You already have a box reserved for this farmstand.", "error")
         return back(day)
     try:
-        # One statement, so two people can't both take the last box.
+        # Lock this day's row first, so two people can't both take the last box.
+        db.execute(
+            "SELECT boxes FROM farmstand_days WHERE farmstand_date = %s FOR UPDATE",
+            (day.isoformat(),),
+        )
         added = db.execute(
             "INSERT INTO box_reservations (farmstand_date, username)"
-            " SELECT ?, ? WHERE (SELECT COUNT(*) FROM box_reservations WHERE farmstand_date = ?)"
-            " < (SELECT COALESCE(MAX(boxes), 0) FROM farmstand_days WHERE farmstand_date = ?)",
+            " SELECT %s, %s WHERE (SELECT COUNT(*) FROM box_reservations WHERE farmstand_date = %s)"
+            " < (SELECT COALESCE(MAX(boxes), 0) FROM farmstand_days WHERE farmstand_date = %s)",
             (day.isoformat(), session["username"], day.isoformat(), day.isoformat()),
         ).rowcount
         db.commit()
-    except sqlite3.IntegrityError:
+    except IntegrityError:  # UNIQUE (farmstand_date, username)
+        db.rollback()
         flash("You already have a box reserved for this farmstand.", "error")
         return back(day)
     if added:
@@ -143,7 +147,7 @@ def cancel(day):
         return back(day)
     db = get_db()
     deleted = db.execute(
-        "DELETE FROM box_reservations WHERE farmstand_date = ? AND username = ?",
+        "DELETE FROM box_reservations WHERE farmstand_date = %s AND username = %s",
         (day.isoformat(), session["username"]),
     ).rowcount
     db.commit()
@@ -177,7 +181,7 @@ def settings(day):
         flash(f"{reserved} boxes are already reserved, so you can't offer fewer than that.", "error")
     else:
         db.execute(
-            "INSERT INTO farmstand_days (farmstand_date, boxes, note) VALUES (?, ?, ?)"
+            "INSERT INTO farmstand_days (farmstand_date, boxes, note) VALUES (%s, %s, %s)"
             " ON CONFLICT (farmstand_date) DO UPDATE SET boxes = excluded.boxes, note = excluded.note",
             (day.isoformat(), boxes, note or None),
         )
@@ -207,7 +211,7 @@ def add_item(day):
     photo_key = storage.save_photo(*upload) if upload else None
     db = get_db()
     db.execute(
-        "INSERT INTO harvest_items (farmstand_date, name, note, photo_key) VALUES (?, ?, ?, ?)",
+        "INSERT INTO harvest_items (farmstand_date, name, note, photo_key) VALUES (%s, %s, %s, %s)",
         (day.isoformat(), name, note or None, photo_key),
     )
     db.commit()
@@ -219,10 +223,10 @@ def add_item(day):
 @admin_required
 def delete_item(item_id):
     db = get_db()
-    item = db.execute("SELECT * FROM harvest_items WHERE id = ?", (item_id,)).fetchone()
+    item = db.execute("SELECT * FROM harvest_items WHERE id = %s", (item_id,)).fetchone()
     if item is None:
         abort(404)
-    db.execute("DELETE FROM harvest_items WHERE id = ?", (item_id,))
+    db.execute("DELETE FROM harvest_items WHERE id = %s", (item_id,))
     db.commit()
     storage.delete_photo(item["photo_key"])
     flash(f"Removed {item['name']} from the harvest list.", "success")
