@@ -5,9 +5,8 @@ topic tag, lists likely causes, and drafts an organic (CCOF-compliant)
 treatment idea. The draft is shown clearly labeled as AI, as a starting point
 while the garden manager writes a real answer.
 
-Claude is called through Google Cloud Vertex AI. The Plant Doctor is on only
-when VERTEX_PROJECT_ID is set. If the call fails for any reason, the question
-is still posted, just without the AI draft.
+The Plant Doctor is on only when ANTHROPIC_API_KEY is set. If the call fails
+for any reason, the question is still posted, just without the AI draft.
 """
 import base64
 import json
@@ -17,9 +16,6 @@ from flask import current_app
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 MODEL = "claude-opus-5-5"
-# Vertex doesn't support server-side fallbacks, so the SDK retries a request
-# that a safety classifier declines on this model instead.
-FALLBACK_MODEL = "claude-opus-4-8"
 
 SYSTEM_PROMPT = """\
 You are the Plant Doctor for the Forge Garden, Santa Clara University's \
@@ -64,43 +60,21 @@ class Diagnosis(BaseModel):
 
 
 def is_enabled():
-    return bool(current_app.config.get("VERTEX_PROJECT_ID"))
+    return bool(current_app.config.get("ANTHROPIC_API_KEY"))
 
 
 def get_client():
-    """One shared Claude-on-Vertex client per app (also used by the Garden Helper chat).
-
-    Signs in with Google Application Default Credentials: on Cloud Run, the
-    service's service account; locally, `gcloud auth application-default login`.
-    """
-    from anthropic import AnthropicVertex, BetaRefusalFallbackMiddleware
+    """One shared Anthropic client per app (also used by the Garden Helper chat)."""
+    import anthropic
 
     client = current_app.extensions.get("anthropic_client")
     if client is None:
-        client = current_app.extensions["anthropic_client"] = AnthropicVertex(
-            project_id=current_app.config["VERTEX_PROJECT_ID"],
-            region=current_app.config["VERTEX_REGION"],
+        client = current_app.extensions["anthropic_client"] = anthropic.Anthropic(
+            api_key=current_app.config["ANTHROPIC_API_KEY"],
             timeout=60.0,
             max_retries=1,
-            middleware=[BetaRefusalFallbackMiddleware([{"model": FALLBACK_MODEL}])],
         )
     return client
-
-
-# Errors that mean "the AI call didn't work" (API errors, or Google sign-in problems).
-def ai_errors():
-    import anthropic
-    from google.auth.exceptions import GoogleAuthError
-
-    return (anthropic.APIError, GoogleAuthError)
-
-
-def create_message(**kwargs):
-    """Send one Messages request to Claude on Vertex, with refusal fallback."""
-    from anthropic import BetaFallbackState
-
-    with BetaFallbackState():  # one fallback scope per request
-        return get_client().beta.messages.create(**kwargs)
 
 
 def diagnose(title, body, photo=None):
@@ -111,6 +85,7 @@ def diagnose(title, body, photo=None):
     """
     if not is_enabled():
         return None
+    import anthropic
 
     content = []
     if photo:
@@ -126,7 +101,7 @@ def diagnose(title, body, photo=None):
     })
 
     try:
-        response = create_message(
+        response = get_client().beta.messages.create(
             model=MODEL,
             max_tokens=4000,
             system=SYSTEM_PROMPT,
@@ -135,8 +110,11 @@ def diagnose(title, body, photo=None):
                 "effort": "medium",
                 "format": {"type": "json_schema", "schema": Diagnosis.model_json_schema()},
             },
+            # If a safety classifier declines, retry on a fallback model in the same call.
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
         )
-    except ai_errors():
+    except anthropic.APIError:
         current_app.logger.warning("Plant Doctor request failed", exc_info=True)
         return None
 

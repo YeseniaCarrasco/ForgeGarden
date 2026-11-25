@@ -6,8 +6,7 @@ this week's farmstand listing, which are put into the prompt on every request.
 
 Conversations are saved in the database (one per browser session, until the
 user starts a new chat). Each user can send DAILY_LIMIT messages a day, to keep
-API costs predictable. Claude is called through Google Cloud Vertex AI; the
-chat is on only when VERTEX_PROJECT_ID is set.
+API costs predictable. The chat is on only when ANTHROPIC_API_KEY is set.
 """
 import uuid
 
@@ -159,8 +158,10 @@ def messages_sent_today(username):
 
 def ask_claude(history):
     """Send the conversation to Claude. Returns the reply text, or None on failure."""
+    import anthropic
+
     try:
-        response = plant_doctor.create_message(
+        response = plant_doctor.get_client().beta.messages.create(
             model=MODEL,
             max_tokens=2000,
             system=[
@@ -169,8 +170,11 @@ def ask_claude(history):
             ],
             messages=[{"role": m["role"], "content": m["content"]} for m in history],
             output_config={"effort": "low"},
+            # If a safety classifier declines, retry on a fallback model in the same call.
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
         )
-    except plant_doctor.ai_errors():
+    except anthropic.APIError:
         current_app.logger.warning("Garden Helper request failed", exc_info=True)
         return None
     if response.stop_reason == "refusal":

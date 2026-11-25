@@ -19,8 +19,8 @@ TEST_USERS = {"alice": "password123", "bob": "builder456", "carol": "garden789"}
 
 @pytest.fixture(autouse=True)
 def no_real_services(monkeypatch):
-    """Tests never call the real Vertex AI or Google Cloud Storage."""
-    monkeypatch.delenv("VERTEX_PROJECT_ID", raising=False)
+    """Tests never call the real Anthropic API or Google Cloud Storage."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("GCS_BUCKET", raising=False)
 
 

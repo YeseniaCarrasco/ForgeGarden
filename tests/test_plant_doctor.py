@@ -35,7 +35,7 @@ class FakeMessages:
 
 @pytest.fixture
 def ai_app(tmp_path):
-    return make_app(tmp_path, VERTEX_PROJECT_ID="test-project")
+    return make_app(tmp_path, ANTHROPIC_API_KEY="test-key")
 
 
 def use_fake(app, messages):
@@ -86,7 +86,7 @@ def test_question_still_posts_when_ai_fails(ai_app):
     assert "Bugs on my roses" in client.get("/plant-help/?topic=other").get_data(as_text=True)
 
 
-def test_plant_doctor_off_without_vertex_project(tmp_path):
+def test_plant_doctor_off_without_api_key(tmp_path):
     client = make_app(tmp_path).test_client()
     login(client, "bob")
     form = client.get("/plant-help/ask").get_data(as_text=True)
@@ -124,7 +124,7 @@ def test_request_includes_photo_question_and_organic_rules(ai_app):
     schema = req["output_config"]["format"]["schema"]
     assert schema["additionalProperties"] is False
     assert schema["properties"]["topic"]["enum"] == ["wilting", "pests", "disease", "soil", "watering", "other"]
-    assert "fallbacks" not in req  # not supported on Vertex; the SDK middleware handles it
+    assert req["fallbacks"] == "default"
 
 
 @pytest.mark.parametrize("reply, stop_reason", [
@@ -137,32 +137,3 @@ def test_unusable_responses_are_ignored(ai_app, reply, stop_reason):
     use_fake(ai_app, FakeMessages(reply, stop_reason=stop_reason))
     with ai_app.app_context():
         assert plant_doctor.diagnose("Title", "Body") is None
-
-
-# ---- Vertex AI setup ----
-
-def test_client_uses_vertex_project_region_and_fallback(tmp_path):
-    from anthropic import AnthropicVertex
-
-    app = make_app(tmp_path, VERTEX_PROJECT_ID="my-project", VERTEX_REGION="us-east5")
-    with app.app_context():
-        client = plant_doctor.get_client()
-        assert isinstance(client, AnthropicVertex)
-        assert client.project_id == "my-project"
-        assert client.region == "us-east5"
-        assert plant_doctor.get_client() is client  # one shared client
-
-
-def test_region_defaults_to_global(tmp_path):
-    app = make_app(tmp_path, VERTEX_PROJECT_ID="my-project")
-    assert app.config["VERTEX_REGION"] == "global"
-
-
-def test_google_sign_in_error_is_handled(ai_app):
-    from google.auth.exceptions import DefaultCredentialsError
-
-    use_fake(ai_app, FakeMessages(error=DefaultCredentialsError("not signed in")))
-    client = ai_app.test_client()
-    login(client, "bob")
-    assert ask(client).status_code == 302
-    assert "AI-generated draft" not in client.get("/plant-help/1").get_data(as_text=True)

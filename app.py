@@ -65,10 +65,8 @@ def create_app(test_config=None):
     app.config["GCS_BUCKET"] = os.environ.get("GCS_BUCKET", "").strip()
     app.config["UPLOAD_FOLDER"] = os.path.join(app.instance_path, "uploads")
     app.config["MAX_CONTENT_LENGTH"] = storage.MAX_PHOTO_BYTES + 1024 * 1024
-    # Plant Doctor and Garden Helper (Claude on Google Cloud Vertex AI) are on
-    # only when a Google Cloud project is set.
-    app.config["VERTEX_PROJECT_ID"] = os.environ.get("VERTEX_PROJECT_ID", "").strip()
-    app.config["VERTEX_REGION"] = os.environ.get("VERTEX_REGION", "").strip() or "global"
+    # Plant Doctor and Garden Helper (AI) are on only when an Anthropic API key is set.
+    app.config["ANTHROPIC_API_KEY"] = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     # Keep the session cookie away from JavaScript and cross-site form posts.
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
