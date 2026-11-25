@@ -5,9 +5,9 @@ topic tag, lists likely causes, and drafts an organic (CCOF-compliant)
 treatment idea. The draft is shown clearly labeled as AI, as a starting point
 while the garden manager writes a real answer.
 
-Claude is called through Google Cloud Vertex AI. The Plant Doctor is on only
-when VERTEX_PROJECT_ID is set. If the call fails for any reason, the question
-is still posted, just without the AI draft.
+Claude is called through the Claude API with the key in ANTHROPIC_API_KEY.
+The Plant Doctor is on only when that key is set. If the call fails for any
+reason, the question is still posted, just without the AI draft.
 """
 import base64
 import json
@@ -16,10 +16,17 @@ from typing import List, Literal
 from flask import current_app
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-MODEL = "claude-opus-5-5"
-# Vertex doesn't support server-side fallbacks, so the SDK retries a request
-# that a safety classifier declines on this model instead.
-FALLBACK_MODEL = "claude-opus-4-8"
+MODEL = "claude-sonnet-5-5"
+# If a safety classifier declines a request on MODEL, the API re-runs it on a
+# fallback model inside the same call (server-side fallback). "default" lets
+# the API choose by refusal category: for Sonnet 5.5 it retries "cyber" and
+# "frontier_llm" declines on Claude Sonnet 5. Other declines come back as
+# stop_reason "refusal", which both features handle. (A list naming
+# claude-opus-4-8 isn't accepted with Sonnet 5.5; only claude-sonnet-5 is.)
+FALLBACKS = "default"
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
+TIMEOUT_SECONDS = 60.0
+MAX_RETRIES = 1
 
 SYSTEM_PROMPT = """\
 You are the Plant Doctor for the Forge Garden, Santa Clara University's \
@@ -64,43 +71,35 @@ class Diagnosis(BaseModel):
 
 
 def is_enabled():
-    return bool(current_app.config.get("VERTEX_PROJECT_ID"))
+    """The AI features are on only when ANTHROPIC_API_KEY is set."""
+    return bool(current_app.config.get("ANTHROPIC_API_KEY"))
 
 
 def get_client():
-    """One shared Claude-on-Vertex client per app (also used by the Garden Helper chat).
-
-    Signs in with Google Application Default Credentials: on Cloud Run, the
-    service's service account; locally, `gcloud auth application-default login`.
-    """
-    from anthropic import AnthropicVertex, BetaRefusalFallbackMiddleware
+    """One shared Claude API client per app (also used by the Garden Helper chat)."""
+    from anthropic import Anthropic
 
     client = current_app.extensions.get("anthropic_client")
     if client is None:
-        client = current_app.extensions["anthropic_client"] = AnthropicVertex(
-            project_id=current_app.config["VERTEX_PROJECT_ID"],
-            region=current_app.config["VERTEX_REGION"],
-            timeout=60.0,
-            max_retries=1,
-            middleware=[BetaRefusalFallbackMiddleware([{"model": FALLBACK_MODEL}])],
+        client = current_app.extensions["anthropic_client"] = Anthropic(
+            api_key=current_app.config["ANTHROPIC_API_KEY"],
+            timeout=TIMEOUT_SECONDS,
+            max_retries=MAX_RETRIES,
         )
     return client
 
 
-# Errors that mean "the AI call didn't work" (API errors, or Google sign-in problems).
-def ai_errors():
-    import anthropic
-    from google.auth.exceptions import GoogleAuthError
-
-    return (anthropic.APIError, GoogleAuthError)
-
-
 def create_message(**kwargs):
-    """Send one Messages request to Claude on Vertex, with refusal fallback."""
-    from anthropic import BetaFallbackState
+    """Send one Messages request to Claude, with server-side refusal fallback.
 
-    with BetaFallbackState():  # one fallback scope per request
-        return get_client().beta.messages.create(**kwargs)
+    Raises whatever the SDK raises; callers catch every exception so users
+    always get a friendly message instead of an error page.
+    """
+    return get_client().beta.messages.create(
+        betas=[FALLBACK_BETA],
+        fallbacks=FALLBACKS,
+        **kwargs,
+    )
 
 
 def diagnose(title, body, photo=None):
@@ -136,18 +135,21 @@ def diagnose(title, body, photo=None):
                 "format": {"type": "json_schema", "schema": Diagnosis.model_json_schema()},
             },
         )
-    except ai_errors():
+    except Exception:  # any failure (API, network, bad key, SDK bug): just skip the draft
         current_app.logger.warning("Plant Doctor request failed", exc_info=True)
         return None
 
-    if response.stop_reason != "end_turn":
-        current_app.logger.warning("Plant Doctor stopped early: %s", response.stop_reason)
-        return None
-    text = next((b.text for b in response.content if b.type == "text"), "")
     try:
+        if response.stop_reason != "end_turn":
+            current_app.logger.warning("Plant Doctor stopped early: %s", response.stop_reason)
+            return None
+        text = next((b.text for b in response.content if b.type == "text"), "")
         return Diagnosis.model_validate_json(text)
     except ValidationError:
         current_app.logger.warning("Plant Doctor returned unexpected JSON: %.200s", text)
+        return None
+    except Exception:  # an unexpected response shape
+        current_app.logger.warning("Plant Doctor response couldn't be read", exc_info=True)
         return None
 
 

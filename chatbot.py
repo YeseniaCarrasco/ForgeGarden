@@ -6,8 +6,8 @@ this week's farmstand listing, which are put into the prompt on every request.
 
 Conversations are saved in the database (one per browser session, until the
 user starts a new chat). Each user can send DAILY_LIMIT messages a day, to keep
-API costs predictable. Claude is called through Google Cloud Vertex AI; the
-chat is on only when VERTEX_PROJECT_ID is set.
+API costs predictable. Claude is called through the Claude API; the chat is
+on only when ANTHROPIC_API_KEY is set.
 """
 import uuid
 
@@ -170,13 +170,13 @@ def ask_claude(history):
             messages=[{"role": m["role"], "content": m["content"]} for m in history],
             output_config={"effort": "low"},
         )
-    except plant_doctor.ai_errors():
+        if response.stop_reason == "refusal":
+            return ("Sorry, I can't help with that. I can answer questions about the "
+                    "Forge Garden, volunteering, the farmstand, and organic gardening.")
+        text = "".join(b.text for b in response.content if b.type == "text").strip()
+    except Exception:  # any failure: the user sees "couldn't answer just now"
         current_app.logger.warning("Garden Helper request failed", exc_info=True)
         return None
-    if response.stop_reason == "refusal":
-        return ("Sorry, I can't help with that. I can answer questions about the "
-                "Forge Garden, volunteering, the farmstand, and organic gardening.")
-    text = "".join(b.text for b in response.content if b.type == "text").strip()
     return text or None
 
 

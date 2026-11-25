@@ -25,7 +25,7 @@ class FakeMessages:
 
 @pytest.fixture
 def app(tmp_path):
-    return make_app(tmp_path, VERTEX_PROJECT_ID="test-project")
+    return make_app(tmp_path, ANTHROPIC_API_KEY="test-key")
 
 
 def use_fake(app, fake):
@@ -57,8 +57,10 @@ def test_conversation_round_trip(app):
     # The second request includes the whole conversation so far.
     roles = [m["role"] for m in fake.requests[1]["messages"]]
     assert roles == ["user", "assistant", "user"]
-    assert fake.requests[1]["model"] == "claude-opus-5-5"
-    assert "fallbacks" not in fake.requests[1]
+    assert fake.requests[1]["model"] == "claude-sonnet-5-5"
+    assert fake.requests[1]["fallbacks"] == "default"
+    assert fake.requests[1]["betas"] == ["server-side-fallback-2026-07-01"]
+    assert fake.requests[1]["output_config"] == {"effort": "low"}
 
 
 def test_prompt_includes_real_garden_data(app):
@@ -148,10 +150,37 @@ def test_ai_reply_html_is_escaped(app):
     assert "&lt;script&gt;" in page
 
 
-def test_chat_off_without_vertex_project(tmp_path):
+def test_chat_off_without_api_key(tmp_path):
     client = make_app(tmp_path).test_client()
     login(client, "bob")
     page = client.get("/garden-helper/").get_data(as_text=True)
-    assert "Garden Helper isn't set up yet" in page
-    r = client.post("/garden-helper/", data={"message": "hi"})
-    assert "isn't set up yet" in r.get_data(as_text=True)
+    assert "Garden Helper isn't available right now" in page
+    r = client.post("/garden-helper/", data={"message": "hi"}, follow_redirects=True)
+    assert r.status_code == 200
+    assert "isn't available right now" in r.get_data(as_text=True)
+
+
+@pytest.mark.parametrize("error", [
+    anthropic.AuthenticationError(
+        "bad key", response=SimpleNamespace(status_code=401, headers={}, request=None), body=None),
+    anthropic.APITimeoutError(request=SimpleNamespace(method="POST", url="x")),
+    RuntimeError("something unexpected"),
+])
+def test_any_ai_error_shows_friendly_message(app, error):
+    use_fake(app, FakeMessages(error=error))
+    client = app.test_client()
+    login(client, "bob")
+    r = send(client, "Hello?")
+    assert r.status_code == 200
+    assert "couldn&#39;t answer just now" in r.get_data(as_text=True)
+
+
+def test_unreadable_response_shows_friendly_message(app):
+    class Broken(FakeMessages):
+        def create(self, **kwargs):
+            return SimpleNamespace(stop_reason="end_turn", content=None)
+    use_fake(app, Broken())
+    client = app.test_client()
+    login(client, "bob")
+    r = send(client, "Hello?")
+    assert r.status_code == 200 and "couldn&#39;t answer just now" in r.get_data(as_text=True)
