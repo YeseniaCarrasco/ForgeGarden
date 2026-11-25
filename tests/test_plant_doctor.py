@@ -103,7 +103,7 @@ def test_ai_draft_is_deleted_with_question(ai_app):
     client.post("/plant-help/1/delete")
     with ai_app.app_context():
         from db import get_db
-        assert get_db().execute("SELECT COUNT(*) FROM plant_doctor").fetchone()[0] == 0
+        assert get_db().execute("SELECT COUNT(*) AS n FROM plant_doctor").fetchone()["n"] == 0
 
 
 # ---- The request sent to Claude ----

@@ -6,13 +6,12 @@ garden manager: they write Garden Journal posts and can remove any Plant Help
 post. Everyone else is a user.
 """
 import re
-import sqlite3
 from functools import wraps
 
 from flask import abort, current_app, flash, redirect, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from db import get_db
+from db import IntegrityError, get_db
 
 USERNAME_MIN, USERNAME_MAX = 3, 32
 PASSWORD_MIN = 8
@@ -27,7 +26,7 @@ def get_user(username):
     if not username:
         return None
     return get_db().execute(
-        "SELECT id, username, password_hash, created_at FROM users WHERE username = ?",
+        "SELECT id, username, password_hash, created_at FROM users WHERE username = %s",
         (username,),
     ).fetchone()
 
@@ -51,11 +50,12 @@ def create_user(username, password):
     db = get_db()
     try:
         db.execute(
-            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+            "INSERT INTO users (username, password_hash) VALUES (%s, %s)",
             (username, generate_password_hash(password)),
         )
         db.commit()
-    except sqlite3.IntegrityError:
+    except IntegrityError:  # UNIQUE username
+        db.rollback()
         return False
     return True
 

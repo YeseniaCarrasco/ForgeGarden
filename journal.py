@@ -12,7 +12,7 @@ from flask import (
 import storage
 from auth import admin_required
 from content import clean, clean_url, excerpt
-from db import get_db
+from db import NOW_TEXT, get_db
 
 bp = Blueprint("journal", __name__, url_prefix="/journal")
 
@@ -20,7 +20,7 @@ KINDS = {"thought": "Thought", "reading": "Reading"}
 
 
 def get_post(pid):
-    row = get_db().execute("SELECT * FROM journal_posts WHERE id = ?", (pid,)).fetchone()
+    row = get_db().execute("SELECT * FROM journal_posts WHERE id = %s", (pid,)).fetchone()
     if row is None:
         abort(404)
     return row
@@ -58,7 +58,7 @@ def index():
     sql = "SELECT * FROM journal_posts"
     params = ()
     if kind:
-        sql += " WHERE kind = ?"
+        sql += " WHERE kind = %s"
         params = (kind,)
     posts = get_db().execute(sql + " ORDER BY id DESC", params).fetchall()
     return render_template(
@@ -83,13 +83,14 @@ def new():
             cur = db.execute(
                 "INSERT INTO journal_posts"
                 " (username, kind, title, body, link_url, link_title, photo_key)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
                 (session["username"], values["kind"], values["title"], values["body"],
                  values["link_url"] or None, values["link_title"] or None, photo_key),
             )
+            pid = cur.fetchone()["id"]
             db.commit()
             flash("Journal post published.", "success")
-            return redirect(url_for("journal.post", pid=cur.lastrowid))
+            return redirect(url_for("journal.post", pid=pid))
     return render_template(
         "journal_form.html", values=values, errors=errors, kinds=KINDS, editing=None,
     ), (400 if errors else 200)
@@ -111,8 +112,8 @@ def edit(pid):
                 values["photo_key"] = None
             db = get_db()
             db.execute(
-                "UPDATE journal_posts SET kind = ?, title = ?, body = ?, link_url = ?,"
-                " link_title = ?, photo_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "UPDATE journal_posts SET kind = %s, title = %s, body = %s, link_url = %s,"
+                f" link_title = %s, photo_key = %s, updated_at = {NOW_TEXT} WHERE id = %s",
                 (values["kind"], values["title"], values["body"],
                  values["link_url"] or None, values["link_title"] or None,
                  values["photo_key"], pid),
@@ -132,7 +133,7 @@ def edit(pid):
 def delete(pid):
     existing = get_post(pid)
     db = get_db()
-    db.execute("DELETE FROM journal_posts WHERE id = ?", (pid,))
+    db.execute("DELETE FROM journal_posts WHERE id = %s", (pid,))
     db.commit()
     storage.delete_photo(existing["photo_key"])
     flash("Journal post deleted.", "success")

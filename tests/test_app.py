@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from app import create_app
+from conftest import TEST_DATABASE_URL
 from db import get_db
 
 
@@ -236,19 +237,28 @@ def test_dashboard_logout_is_a_form_button(client):
 
 # ---- settings ----
 
-@pytest.mark.parametrize("name", ["SECRET_KEY", "ADMIN_USERNAME"])
+@pytest.mark.parametrize("name", ["SECRET_KEY", "ADMIN_USERNAME", "DATABASE_URL"])
 def test_missing_setting_stops_startup(monkeypatch, name):
     monkeypatch.setenv(name, "")
     with pytest.raises(RuntimeError, match=name):
         create_app()
 
 
-def test_settings_come_from_environment(monkeypatch, tmp_path):
+def test_settings_come_from_environment(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "from-env")
     monkeypatch.setenv("ADMIN_USERNAME", " Dana ")
-    app = create_app({"DATABASE": str(tmp_path / "t.db")})
+    app = create_app()
     assert app.config["SECRET_KEY"] == "from-env"
     assert app.config["ADMIN_USERNAME"] == "dana"
+    # conftest swaps in TEST_DATABASE_URL, so the app never sees the real database.
+    assert app.config["DATABASE_URL"] == TEST_DATABASE_URL
+
+
+def test_app_does_not_use_sqlite():
+    root = Path(__file__).resolve().parent.parent
+    for path in root.glob("*.py"):
+        source = path.read_text()
+        assert "sqlite" not in source.lower() and "forge.db" not in source, path.name
 
 
 def test_no_fallback_secret_in_code():

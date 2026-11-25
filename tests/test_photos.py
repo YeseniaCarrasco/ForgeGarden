@@ -1,6 +1,7 @@
-import sqlite3
-
 import pytest
+
+from conftest import TEST_DATABASE_URL
+from db import connect, init_db
 
 from helpers import JPEG, PNG, login, make_app, photo, uploaded_files
 
@@ -116,20 +117,29 @@ def test_editing_journal_text_keeps_photo(client, tmp_path):
     assert "Updated title" in page and f"/photos/{key}" in page
 
 
+def photo_columns():
+    with connect(TEST_DATABASE_URL) as conn:
+        return {r["table_name"] for r in conn.execute(
+            "SELECT table_name FROM information_schema.columns"
+            " WHERE column_name = 'photo_key' AND table_schema = current_schema()"
+            " AND table_name IN ('questions', 'journal_posts')"
+        )}
+
+
 def test_old_database_gets_photo_columns(tmp_path):
-    db_path = tmp_path / "test.db"
-    con = sqlite3.connect(db_path)
-    con.executescript(
-        "CREATE TABLE questions (id INTEGER PRIMARY KEY, username TEXT NOT NULL,"
-        " topic TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,"
-        " helpful_answer_id INTEGER, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);"
-        "INSERT INTO questions (username, topic, title, body) VALUES ('bob', 'soil', 'Old question', 'From before photos.');"
-    )
-    con.commit()
-    con.close()
+    # A database from before photos: same tables, but no photo_key columns.
+    with connect(TEST_DATABASE_URL) as conn:
+        conn.execute("ALTER TABLE questions DROP COLUMN photo_key")
+        conn.execute("ALTER TABLE journal_posts DROP COLUMN photo_key")
+        conn.execute("INSERT INTO questions (username, topic, title, body)"
+                     " VALUES ('bob', 'soil', 'Old question', 'From before photos.')")
+    assert photo_columns() == set()
+
+    import db
+    db._initialized.discard(TEST_DATABASE_URL)  # make startup check the tables again
+    init_db(TEST_DATABASE_URL)
+    assert photo_columns() == {"questions", "journal_posts"}
 
     client = make_app(tmp_path).test_client()
     login(client, "bob")
     assert "Old question" in client.get("/plant-help/1").get_data(as_text=True)
-    columns = {row[1] for row in sqlite3.connect(db_path).execute("PRAGMA table_info(questions)")}
-    assert "photo_key" in columns

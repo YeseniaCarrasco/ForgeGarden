@@ -24,7 +24,7 @@ def excerpt(text, limit=240):
 
 
 def short_date(timestamp):
-    """SQLite CURRENT_TIMESTAMP (UTC) -> 'Nov 11, 2026' in the server's local time."""
+    """Stored UTC timestamp text -> 'Nov 11, 2026' in the server's local time."""
     when = datetime.fromisoformat(timestamp).replace(tzinfo=timezone.utc).astimezone()
     return f"{when:%b} {when.day}, {when.year}"
 

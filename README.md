@@ -30,6 +30,8 @@ Requires Python 3.10 or newer.
 
        SECRET_KEY=
        ADMIN_USERNAME=
+       DATABASE_URL=
+       TEST_DATABASE_URL=
        SITE_NAME=Forge Garden
        VERTEX_PROJECT_ID=
        VERTEX_REGION=global
@@ -39,12 +41,14 @@ Requires Python 3.10 or newer.
    | ---------------- | ---------------------------------------------------------------------------------------- |
    | `SECRET_KEY`     | Signs session cookies and CSRF tokens. **Required**: the app won't start without it.    |
    | `ADMIN_USERNAME` | The username of the admin / garden manager. Everyone else is `user`. **Required**: the app won't start without it. |
+   | `DATABASE_URL`   | PostgreSQL connection string for the app's data (a Neon database, for example `postgresql://user:password@ep-….neon.tech/neondb?sslmode=require`). **Required**: the app won't start without it. |
+   | `TEST_DATABASE_URL` | A **separate** PostgreSQL database used only by the tests. Tests empty every table, so never point this at real data. Tests refuse to run if it's missing or is the same database as `DATABASE_URL`. |
    | `SITE_NAME`      | Name shown in the page header. Defaults to `Forge Garden`.                               |
    | `VERTEX_PROJECT_ID` | Optional. Google Cloud project used to call Claude through Vertex AI. Turns on the Plant Doctor and the Garden Helper chat. Leave empty to turn them off. See [AI setup](#ai-setup-claude-on-vertex-ai). |
    | `VERTEX_REGION`  | Vertex AI region for Claude. Defaults to `global`. |
    | `GCS_BUCKET`     | Optional. Name of a Google Cloud Storage bucket for photos. Leave empty to store photos in `instance/uploads/` instead. |
 
-   Fill in `SECRET_KEY` and `ADMIN_USERNAME` yourself. One way to generate a secret key:
+   Fill in `SECRET_KEY`, `ADMIN_USERNAME`, and `DATABASE_URL` yourself. On Neon, create a second database (or branch) for `TEST_DATABASE_URL`. One way to generate a secret key:
 
        .venv/bin/python -c "import secrets; print(secrets.token_hex(32))"
 
@@ -60,7 +64,7 @@ Then open http://127.0.0.1:5000.
 
 Uploaded photos are saved in `instance/uploads/` (ignored by git) unless `GCS_BUCKET` is set; see [Photos](#photos).
 
-The app stores compost route sign-ups, Plant Help posts, journal posts, and farmstand data in a SQLite database, `forge.db`, in the project folder. It's created automatically the first time it's needed, and any missing tables are added automatically, so an existing `forge.db` keeps working. It's ignored by git. Delete it to start over with no data.
+The app stores accounts, compost route sign-ups, Plant Help posts, journal posts, farmstand data, and Garden Helper chats in the PostgreSQL database at `DATABASE_URL` (using psycopg). Any missing tables are created when the app starts. The old SQLite file, `forge.db`, is no longer used.
 
 ## Sample users
 
@@ -204,7 +208,7 @@ Posts on both pages are plain text: any HTML is shown as text, not rendered. Lea
 
     app.py              Flask app setup, settings, About/register/login/dashboard, calendar routes
     auth.py             Accounts, password checks, login_required / admin_required, roles
-    db.py               SQLite connection and table definitions (including users)
+    db.py               PostgreSQL connection (psycopg) and table definitions
     volunteer.py        Volunteer schedule data and calendar helpers
     board.py            Plant Help board routes
     journal.py          Garden Journal routes
@@ -222,5 +226,8 @@ Posts on both pages are plain text: any HTML is shown as text, not rendered. Lea
 
     .venv/bin/pytest
 
-Tests never call the real Anthropic API or Google Cloud (the Plant Doctor and Garden Helper tests use a fake client). Tests use a temporary database, a temporary photo folder, and a fixed "today" date (`TODAY` in the app config), so they don't touch `forge.db` and give the same results on any day.
-Tests use a temporary database and a fixed "today" date (`TODAY` in the app config), so they don't touch `forge.db` and give the same results on any day. They use their own test `SECRET_KEY` and `ADMIN_USERNAME` (not `.env`), create test accounts in the temporary database, and turn CSRF off except in the tests that check it.
+Tests never call the real Anthropic API or Google Cloud (the Plant Doctor and Garden Helper tests use a fake client).
+
+Tests use the PostgreSQL database in `TEST_DATABASE_URL`, never `DATABASE_URL`. They stop before running anything if `TEST_DATABASE_URL` is missing or points at the same database as `DATABASE_URL` (Neon's pooled and direct hosts for one database count as the same). Every table is emptied before each test.
+
+Tests also use a temporary photo folder and a fixed "today" date (`TODAY` in the app config), so they give the same results on any day. They use their own test `SECRET_KEY` and `ADMIN_USERNAME` (not the ones in `.env`), create test accounts in the test database, and turn CSRF off except in the tests that check it.
