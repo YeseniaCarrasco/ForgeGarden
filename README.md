@@ -1,30 +1,34 @@
 # ForgeGarden
 
-A Flask web app for Santa Clara University's Forge Garden. It has:
+A Flask web app for Santa Clara University's Forge Garden.
+
+**Live site:** https://forge-garden-1028271237269.us-west1.run.app
+
+It has:
 
 - An **About page** (the homepage) describing the garden and its program goals.
-- A public **Volunteer Calendar**: a week-by-week grid (9am–6pm) showing drop-in volunteer hours, sign-up shifts, and garden events.
-- **Compost route sign-ups** for logged-in volunteers, with a training day required the first time.
-- **Plant Help**, a community question-and-answer board for plant problems like wilting or pests. Anyone can read it; logged-in users can ask (with an optional photo) and answer.
-- The **Plant Doctor**, an AI (Claude) that writes a first take on each new Plant Help question: a suggested topic, likely causes, and an organic treatment idea.
-- A **Garden Journal**, a blog where the garden manager shares thoughts and readings about the garden and the environment, with optional photos.
-- The **Garden Helper**, an AI chatbot (Claude) that answers questions about volunteering, the farmstand, the garden, and organic growing.
-- A **Friday Farmstand** page showing what's freshly harvested each week (with photos), where students can reserve a produce box.
 - **Accounts**: anyone can register with a username and password, then log in. Every page except About, Login, and Register requires login.
 - A **Volunteer Calendar**: a week-by-week grid (9am–6pm) showing drop-in volunteer hours, sign-up shifts, and garden events.
 - **Compost route sign-ups**, with a training day required the first time.
-- **Plant Help**, a community question-and-answer board for plant problems like wilting or pests. Logged-in users can read, ask, and answer.
-- A **Garden Journal**, a blog where the garden manager shares thoughts and readings about the garden and the environment.
-- A **dashboard** where logged-in volunteers can see and cancel their upcoming sign-ups.
+- **Plant Help**, a community question-and-answer board for plant problems like wilting or pests, with an optional photo on each question.
+- The **Plant Doctor**, an AI (Claude) that writes a first take on each new Plant Help question: a suggested topic, likely causes, and an organic treatment idea.
+- The **Garden Helper**, an AI chatbot (Claude) that answers questions about volunteering, the farmstand, the garden, and organic growing.
+- A **Garden Journal**, a blog where the garden manager shares thoughts and readings, with optional photos.
+- A **Friday Farmstand** page showing what's freshly harvested each week (with photos), where users can reserve a produce box.
+- A **dashboard** where users can see and cancel their compost routes and produce boxes.
+
+Built with Flask, PostgreSQL on Neon, the Claude API, and Google Cloud Run (with Cloud Storage for photos and Secret Manager for secrets). Every merge to `main` is tested and deployed automatically by GitHub Actions.
 
 ## Setup
 
-Requires Python 3.10 or newer.
+Requires Python 3.10 or newer (the live site uses 3.13).
 
 1. Create a virtual environment and install dependencies:
 
        python3 -m venv .venv
        .venv/bin/pip install -r requirements.txt
+
+   On Windows, use `python -m venv .venv` and `.venv\Scripts\pip install -r requirements.txt`, and write `.venv\Scripts\` instead of `.venv/bin/` in the commands below.
 
 2. Create a `.env` file in the project root with these variables:
 
@@ -64,14 +68,18 @@ Uploaded photos are saved in `instance/uploads/` (ignored by git) unless `GCS_BU
 
 The app stores accounts, compost route sign-ups, Plant Help posts, journal posts, farmstand data, and Garden Helper chats in the PostgreSQL database at `DATABASE_URL` (using psycopg). Any missing tables are created when the app starts. The old SQLite file, `forge.db`, is no longer used.
 
-## Sample users
-
 ## Accounts and security
 
 - Register at `/register`. Usernames are 3–32 characters (letters, numbers, dots, dashes, underscores) and are not case-sensitive. Passwords need at least 8 characters.
 - Only Werkzeug password hashes are stored in the `users` table, never the passwords themselves.
 - The session cookie is `HttpOnly` and `SameSite=Lax`. It's also `Secure` when running on Cloud Run (when `K_SERVICE` is set).
 - Every POST form includes a CSRF token (Flask-WTF `CSRFProtect`). Log out is a POST button on the dashboard.
+- After 10 wrong passwords for one username within 15 minutes, that username can't log in until the older failures are 15 minutes old (`MAX_FAILED_LOGINS` and `LOCKOUT_MINUTES` in [`auth.py`](auth.py)). Failures are stored in the `failed_logins` table, so the limit works across every Cloud Run instance.
+- Redirect targets from requests (`?next=` after login, and the farmstand cancel button) must be a path on this site. `content.local_path` rejects other sites, including tricks like `/\evil.example` and `/<tab>/evil.example`.
+- Every response sends browser security headers: `X-Frame-Options: DENY` and a `Content-Security-Policy` with `frame-ancestors 'none'` (no framing by other sites), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Strict-Transport-Security` on Cloud Run.
+- Posts, answers, journal entries, and AI replies are shown as plain text (Jinja escapes any HTML). Database queries always use parameters, never text pasted into SQL.
+
+See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for the AI-assisted security review: what was checked, what was fixed, and the risks that remain.
 
 ## Pages
 
@@ -89,15 +97,12 @@ The app stores accounts, compost route sign-ups, Plant Help posts, journal posts
 | `/journal/`                         | Yes            | Garden Journal. `?kind=thought` or `?kind=reading` filters by type.  |
 | `/journal/<id>`                     | Yes            | A single journal post.                                              |
 | `/journal/new`, `/journal/<id>/edit`| Admin only     | Write or edit a journal post.                                       |
-| `/farmstand/`                       | No             | This week's farmstand: harvest list and produce boxes. `?day=2026-12-01` shows the farmstand in that date's week. |
+| `/farmstand/`                       | Yes            | This week's farmstand: harvest list and produce boxes. `?day=2026-12-01` shows the farmstand in that date's week. |
 | `/farmstand/<YYYY-MM-DD>/reserve`, `/cancel` | Yes (POST) | Reserve or cancel your produce box for that Friday.          |
 | `/farmstand/<YYYY-MM-DD>/items`, `/settings`, `/farmstand/items/<id>/delete` | Admin only (POST) | Add or remove harvest items; set the number of boxes and a note. |
-| `/photos/<key>`                     | No             | An uploaded photo.                                                  |
+| `/photos/<key>`                     | Yes            | An uploaded photo.                                                  |
 | `/garden-helper/`                   | Yes            | Garden Helper AI chat. POST `/garden-helper/new` starts a new chat. |
-| `/login`                            | No             | Login form.                                                         |
-| `/dashboard`                        | Yes            | Your name, role, and upcoming compost routes.                       |
-| `/logout`                           | No             | Logs out and returns to the homepage.                               |
-| `/dashboard`                        | Yes            | Your username, role, and upcoming compost routes.                   |
+| `/dashboard`                        | Yes            | Your username, role, upcoming compost routes, and produce boxes.    |
 | `/logout`                           | Yes (POST)     | Logs out and returns to the homepage.                               |
 
 Logged-out visitors who open a login-required page are sent to `/login?next=<page>` and return there after logging in.
@@ -157,6 +162,7 @@ A chatbot for logged-in users at `/garden-helper/`, linked in the header and das
 - Conversations are saved in the `chat_messages` table. Each browser session has its own chat, and only that user can see it. **New chat** starts over.
 - Claude sees the last 20 messages of the conversation.
 - Each user can send 40 messages a day (`DAILY_LIMIT` in [`chatbot.py`](chatbot.py)) to keep API costs predictable. The count resets at midnight Pacific time. Each message costs a fraction of a cent to a few cents.
+- It also stops for everyone once the site reaches its daily AI limit (see [AI spending limits](#ai-spending-limits)).
 - The prompt and garden facts are in [`chatbot.py`](chatbot.py). Update them there if the garden's details change.
 
 ## AI setup (Claude API)
@@ -165,6 +171,20 @@ The Plant Doctor and Garden Helper call the Claude API (Claude Sonnet 5.5, `clau
 
 1. Create an API key in the [Claude Console](https://platform.claude.com/).
 2. Set `ANTHROPIC_API_KEY=...` in `.env` (on Cloud Run, set it as a secret environment variable) and restart the app.
+
+### AI spending limits
+
+So one person, or many throwaway accounts, can't use up the API credits (days are Pacific time):
+
+| Limit | Default | Where |
+| --- | --- | --- |
+| Plant Doctor drafts per user per day | 10 | `PLANT_DOCTOR_DAILY_LIMIT` in [`plant_doctor.py`](plant_doctor.py) |
+| Garden Helper messages per user per day | 40 | `DAILY_LIMIT` in [`chatbot.py`](chatbot.py) |
+| AI requests per day for the whole site (questions + chat messages) | 500 | `SITE_DAILY_LIMIT` in [`plant_doctor.py`](plant_doctor.py) |
+
+Past a limit, questions still post (without an AI draft) and the chat shows a "come back tomorrow" message. It's also worth setting a monthly spend limit for the key's workspace in the Claude Console.
+
+### Refusals and errors
 
 If a safety check declines a request, the API can retry it on another model in the same call (server-side fallback, `fallbacks: "default"`). For Claude Sonnet 5.5 it retries "cyber" and "frontier_llm" declines on Claude Sonnet 5. Other declines aren't retried: the Plant Doctor then skips its draft, and the Garden Helper replies that it can't help with that. Requests time out after 60 seconds and are retried once.
 
@@ -263,6 +283,7 @@ Replace `YOUR_ADMIN_USERNAME` with the garden manager's username. After the firs
     static/style.css    Styles, including light and dark mode colors
     tests/              pytest tests
     requirements.txt    Pinned dependencies
+    SECURITY_REVIEW.md  AI-assisted security review: findings, fixes, remaining risks
     Procfile            How Cloud Run starts the app (gunicorn)
     .python-version     Python version for the Cloud Run build
     .gcloudignore       Files left out of Cloud Run uploads
@@ -275,5 +296,7 @@ Replace `YOUR_ADMIN_USERNAME` with the garden manager's username. After the firs
 Tests never call the real Claude API or Google Cloud. The Plant Doctor and Garden Helper tests use a fake client, `ANTHROPIC_API_KEY` from `.env` is ignored, and any request a real Claude client tries to send is blocked before it leaves the machine.
 
 Tests use the PostgreSQL database in `TEST_DATABASE_URL`, never `DATABASE_URL`. They stop before running anything if `TEST_DATABASE_URL` is missing or points at the same database as `DATABASE_URL` (Neon's pooled and direct hosts for one database count as the same). Every table is emptied before each test.
+
+The full suite takes about 10 minutes against Neon, because every test empties the test database first. To run one file, name it, for example `.venv/bin/pytest tests/test_security.py`.
 
 Tests also use a temporary photo folder and a fixed "today" date (`TODAY` in the app config), so they give the same results on any day. They use their own test `SECRET_KEY` and `ADMIN_USERNAME` (not the ones in `.env`), create test accounts in the test database, and turn CSRF off except in the tests that check it.

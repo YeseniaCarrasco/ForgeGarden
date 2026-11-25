@@ -198,6 +198,9 @@ def index():
         message, err = clean(request.form, "message", "Your message", MAX_MESSAGE_CHARS)
         if err:
             flash(err, "error")
+        elif plant_doctor.site_requests_today() >= plant_doctor.SITE_DAILY_LIMIT:
+            flash("The Garden Helper has reached its daily limit for the whole site. "
+                  "Please come back tomorrow!", "error")
         elif used >= DAILY_LIMIT:
             flash(f"You've reached today's limit of {DAILY_LIMIT} messages. "
                   "Please come back tomorrow!", "error")

@@ -91,7 +91,11 @@ def ask():
             )
             qid = cur.fetchone()["id"]
             db.commit()
-            run_plant_doctor(qid, title, body, upload, let_ai_pick_topic=topic == NOT_SURE)
+            if plant_doctor.is_enabled() and not plant_doctor.within_limits(session["username"]):
+                flash("The Plant Doctor has reached its daily limit, so this question has no "
+                      "AI draft. The garden manager and community can still answer.", "error")
+            else:
+                run_plant_doctor(qid, title, body, upload, let_ai_pick_topic=topic == NOT_SURE)
             flash("Your question is posted.", "success")
             return redirect(url_for("board.question", qid=qid))
     return render_template(

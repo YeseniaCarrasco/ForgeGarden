@@ -11,11 +11,16 @@ from functools import wraps
 from flask import abort, current_app, flash, redirect, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from db import IntegrityError, get_db
+from db import IntegrityError, get_db, utc_text_minutes_ago
 
 USERNAME_MIN, USERNAME_MAX = 3, 32
 PASSWORD_MIN = 8
 USERNAME_CHARS = re.compile(r"^[a-z0-9_.-]+$")
+
+# Password guessing: after MAX_FAILED_LOGINS wrong passwords for one username
+# within LOCKOUT_MINUTES, that username can't log in until older failures age out.
+MAX_FAILED_LOGINS = 10
+LOCKOUT_MINUTES = 15
 
 
 def normalize_username(text):
@@ -66,6 +71,29 @@ def check_login(username, password):
     if user and check_password_hash(user["password_hash"], password):
         return user
     return None
+
+
+def is_locked_out(username):
+    """True if this username has too many recent failed logins."""
+    count = get_db().execute(
+        "SELECT COUNT(*) AS n FROM failed_logins WHERE username = %s AND created_at >= %s",
+        (username, utc_text_minutes_ago(LOCKOUT_MINUTES)),
+    ).fetchone()["n"]
+    return count >= MAX_FAILED_LOGINS
+
+
+def record_failed_login(username):
+    db = get_db()
+    db.execute("INSERT INTO failed_logins (username) VALUES (%s)", (username,))
+    # Keep the table small: drop failures older than a day.
+    db.execute("DELETE FROM failed_logins WHERE created_at < %s", (utc_text_minutes_ago(24 * 60),))
+    db.commit()
+
+
+def clear_failed_logins(username):
+    db = get_db()
+    db.execute("DELETE FROM failed_logins WHERE username = %s", (username,))
+    db.commit()
 
 
 def role_for(username):

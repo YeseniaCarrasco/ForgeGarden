@@ -14,7 +14,7 @@ from flask import (
 import storage
 import volunteer
 from auth import admin_required, is_admin, login_required
-from content import clean
+from content import clean, local_path
 from db import IntegrityError, current_date, get_db
 
 bp = Blueprint("farmstand", __name__, url_prefix="/farmstand")
@@ -155,9 +155,9 @@ def cancel(day):
         flash("Your produce box reservation is cancelled.", "success")
     else:
         flash("You didn't have a box reserved for that day.", "error")
-    next_url = request.form.get("next", "")
-    # Only allow local paths (the dashboard sends one) to avoid open redirects.
-    if next_url.startswith("/") and not next_url.startswith("//"):
+    # Only allow paths on this site (the dashboard sends one) to avoid open redirects.
+    next_url = local_path(request.form.get("next", ""))
+    if next_url:
         return redirect(next_url)
     return back(day)
 
