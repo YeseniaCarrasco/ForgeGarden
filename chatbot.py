@@ -20,7 +20,7 @@ import plant_doctor
 import volunteer
 from auth import login_required
 from content import clean
-from db import TODAY_TEXT, current_date, get_db
+from db import current_date, get_db, pacific_now, utc_range_for_pacific_day
 
 bp = Blueprint("chat", __name__, url_prefix="/garden-helper")
 
@@ -150,10 +150,16 @@ def load_messages(chat_id):
 
 
 def messages_sent_today(username):
+    """Messages this user sent since midnight Pacific time (the limit resets then).
+
+    Uses the real clock, not the TODAY test pin, since messages are stamped
+    with the real time.
+    """
+    start, end = utc_range_for_pacific_day(pacific_now().date())
     return get_db().execute(
         "SELECT COUNT(*) AS n FROM chat_messages WHERE username = %s AND role = 'user'"
-        f" AND left(created_at, 10) = {TODAY_TEXT}",
-        (username,),
+        " AND created_at >= %s AND created_at < %s",
+        (username, start, end),
     ).fetchone()["n"]
 
 

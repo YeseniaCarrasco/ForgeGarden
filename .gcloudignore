@@ -1,0 +1,16 @@
+# Files `gcloud run deploy --source .` must not upload.
+# Secrets come from Secret Manager, never from a local .env file.
+.gcloudignore
+.git
+.gitignore
+.github/
+.env
+.env.*
+.venv/
+__pycache__/
+.pytest_cache/
+forge.db
+instance/
+tests/
+# Everything else in .gitignore, too.
+#!include:.gitignore

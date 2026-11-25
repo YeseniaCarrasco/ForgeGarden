@@ -116,6 +116,49 @@ def test_daily_limit(app, monkeypatch):
     assert len(fake.requests) == 2
 
 
+def test_daily_limit_counts_by_pacific_date(app, monkeypatch):
+    from datetime import date, datetime
+
+    from content import PACIFIC
+    from db import get_db, utc_range_for_pacific_day
+
+    # 5:30pm Pacific on Nov 24 is already Nov 25 in UTC.
+    monkeypatch.setattr(chatbot, "pacific_now",
+                        lambda: datetime(2026, 11, 24, 17, 30, tzinfo=PACIFIC))
+    rows = [  # (username, role, created_at in UTC)
+        ("bob", "user", "2026-11-24 08:00:00"),       # Nov 24, 12:00am PST: counts
+        ("bob", "user", "2026-11-24 20:00:00"),       # Nov 24, noon: counts
+        ("bob", "user", "2026-11-25 01:00:00"),       # Nov 24, 5pm (Nov 25 UTC): counts
+        ("bob", "user", "2026-11-24 07:59:59"),       # Nov 23, 11:59pm: yesterday
+        ("bob", "user", "2026-11-25 08:00:00"),       # Nov 25, 12:00am: tomorrow
+        ("bob", "assistant", "2026-11-24 20:00:00"),  # Claude's replies don't count
+        ("carol", "user", "2026-11-24 20:00:00"),     # someone else's message
+    ]
+    with app.app_context():
+        db = get_db()
+        for username, role, created_at in rows:
+            db.execute(
+                "INSERT INTO chat_messages (conversation_id, username, role, content, created_at)"
+                " VALUES ('c1', %s, %s, 'hi', %s)", (username, role, created_at),
+            )
+        db.commit()
+        # Counting by the UTC date (Nov 25) would give 2.
+        assert chatbot.messages_sent_today("bob") == 3
+
+        # Pacific days are 23 or 25 hours long when daylight saving time changes.
+        assert utc_range_for_pacific_day(date(2026, 3, 8)) == ("2026-03-08 08:00:00", "2026-03-09 07:00:00")
+        assert utc_range_for_pacific_day(date(2026, 11, 1)) == ("2026-11-01 07:00:00", "2026-11-02 08:00:00")
+
+    # With a limit of 3, bob's next message is refused and Claude isn't called.
+    monkeypatch.setattr(chatbot, "DAILY_LIMIT", 3)
+    fake = use_fake(app, FakeMessages())
+    client = app.test_client()
+    login(client, "bob")
+    page = send(client, "one more").get_data(as_text=True)
+    assert "reached today&#39;s limit of 3 messages" in page
+    assert fake.requests == []
+
+
 @pytest.mark.parametrize("message, error", [("   ", "Your message is required."),
                                              ("x" * 1001, "1000 characters or fewer")])
 def test_message_validation(app, message, error):

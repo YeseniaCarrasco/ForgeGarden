@@ -196,13 +196,15 @@ def test_admin_can_delete_any_question_and_answers_go_too(client):
     assert client.post("/plant-help/answers/1/delete").status_code == 404
 
 
-def test_short_date_uses_local_time(monkeypatch):
+def test_short_date_uses_pacific_time(monkeypatch):
     import time
     from content import short_date
-    monkeypatch.setenv("TZ", "America/Los_Angeles")
+    # Even on a server set to another time zone, dates are shown in Pacific time.
+    monkeypatch.setenv("TZ", "Asia/Tokyo")
     time.tzset()
     try:
         assert short_date("2026-11-12 03:00:00") == "Nov 11, 2026"  # 7pm Pacific
+        assert short_date("2026-07-01 06:59:00") == "Jun 30, 2026"  # 11:59pm PDT
     finally:
         monkeypatch.delenv("TZ")
         time.tzset()

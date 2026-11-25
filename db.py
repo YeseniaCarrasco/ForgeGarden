@@ -4,21 +4,24 @@ The connection string comes from DATABASE_URL. Tables are created at startup
 if they are missing. Rows come back as dicts, so code reads them as row["name"].
 
 Timestamps are stored as UTC text like "2026-11-12 03:00:00" (the format the
-app has always used), and dates as "YYYY-MM-DD" text.
+app has always used), and dates as "YYYY-MM-DD" text. "Today" is the date in
+Pacific time, where the garden is.
 """
-from datetime import date
+from datetime import datetime, time, timedelta, timezone
 
 import psycopg
 from flask import current_app, g
 from psycopg.rows import dict_row
 
+from content import PACIFIC
+
 # Raised when a UNIQUE (or other) constraint is broken. Other modules catch this
 # instead of importing psycopg. After catching it, call get_db().rollback().
 IntegrityError = psycopg.IntegrityError
 
-# SQL for "now" and "today" in UTC, in the same text format as the stored values.
+# SQL for "now" in UTC, in the same text format as the stored values.
 NOW_TEXT = "to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')"
-TODAY_TEXT = "to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD')"
+STORED_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 SCHEMA = [
     # Accounts. Only Werkzeug password hashes are stored, never plain text.
@@ -157,6 +160,25 @@ def close_db(_exc=None):
         db.close()  # anything not committed is rolled back
 
 
+def pacific_now():
+    """The current time in Pacific time (the real clock, never pinned)."""
+    return datetime.now(PACIFIC)
+
+
 def current_date():
-    """Today's date; tests can pin it with the TODAY config value."""
-    return current_app.config.get("TODAY") or date.today()
+    """Today's date in Pacific time; tests can pin it with the TODAY config value."""
+    return current_app.config.get("TODAY") or pacific_now().date()
+
+
+def utc_range_for_pacific_day(day):
+    """(start, end) stored-timestamp text covering one Pacific calendar day.
+
+    Use as `created_at >= start AND created_at < end`. Stored timestamps are UTC
+    text in one fixed format, so comparing the text compares the times. Handles
+    the 23- and 25-hour days when daylight saving time starts and ends.
+    """
+    def utc_text(d):
+        start = datetime.combine(d, time.min, tzinfo=PACIFIC).astimezone(timezone.utc)
+        return start.strftime(STORED_FORMAT)
+
+    return utc_text(day), utc_text(day + timedelta(days=1))
