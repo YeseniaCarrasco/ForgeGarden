@@ -25,7 +25,7 @@ class FakeMessages:
 
 @pytest.fixture
 def app(tmp_path):
-    return make_app(tmp_path, ANTHROPIC_API_KEY="test-key")
+    return make_app(tmp_path, VERTEX_PROJECT_ID="test-project")
 
 
 def use_fake(app, fake):
@@ -58,7 +58,7 @@ def test_conversation_round_trip(app):
     roles = [m["role"] for m in fake.requests[1]["messages"]]
     assert roles == ["user", "assistant", "user"]
     assert fake.requests[1]["model"] == "claude-opus-5-5"
-    assert fake.requests[1]["fallbacks"] == "default"
+    assert "fallbacks" not in fake.requests[1]
 
 
 def test_prompt_includes_real_garden_data(app):
@@ -148,7 +148,7 @@ def test_ai_reply_html_is_escaped(app):
     assert "&lt;script&gt;" in page
 
 
-def test_chat_off_without_api_key(tmp_path):
+def test_chat_off_without_vertex_project(tmp_path):
     client = make_app(tmp_path).test_client()
     login(client, "bob")
     page = client.get("/garden-helper/").get_data(as_text=True)

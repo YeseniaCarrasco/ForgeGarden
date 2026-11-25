@@ -26,7 +26,8 @@ Requires Python 3.10 or newer.
        SECRET_KEY=
        ADMIN_USERNAME=
        SITE_NAME=Forge Garden
-       ANTHROPIC_API_KEY=
+       VERTEX_PROJECT_ID=
+       VERTEX_REGION=global
        GCS_BUCKET=
 
    | Variable         | What it does                                                                             |
@@ -34,7 +35,8 @@ Requires Python 3.10 or newer.
    | `SECRET_KEY`     | Signs session cookies. If empty, the app falls back to an insecure dev-only key.         |
    | `ADMIN_USERNAME` | Which sample user is the admin / garden manager (for example `alice`). Everyone else is `user`. |
    | `SITE_NAME`      | Name shown in the page header. Defaults to `Forge Garden`.                               |
-   | `ANTHROPIC_API_KEY` | Optional. Turns on the Plant Doctor and the Garden Helper chat (AI). Get a key at https://console.anthropic.com. Leave empty to turn it off. |
+   | `VERTEX_PROJECT_ID` | Optional. Google Cloud project used to call Claude through Vertex AI. Turns on the Plant Doctor and the Garden Helper chat. Leave empty to turn them off. See [AI setup](#ai-setup-claude-on-vertex-ai). |
+   | `VERTEX_REGION`  | Vertex AI region for Claude. Defaults to `global`. |
    | `GCS_BUCKET`     | Optional. Name of a Google Cloud Storage bucket for photos. Leave empty to store photos in `instance/uploads/` instead. |
 
    Fill in `SECRET_KEY` and `ADMIN_USERNAME` yourself. One way to generate a secret key:
@@ -126,13 +128,13 @@ The weekly schedule lives in [`volunteer.py`](volunteer.py). The grid covers `GR
 
 ### Plant Doctor (AI)
 
-When `ANTHROPIC_API_KEY` is set, each new question is sent (with its photo, if any) to Claude (`claude-opus-5-5`), which returns:
+When `VERTEX_PROJECT_ID` is set, each new question is sent (with its photo, if any) to Claude (`claude-opus-5-5`), which returns:
 
 - a **suggested topic**. If the asker picks "Not sure", the question is filed under this topic,
 - 1–4 **likely issues**, and
 - an **organic treatment idea** that only uses CCOF-allowed methods.
 
-This shows on the question page in a box clearly labeled as an AI draft, above the community answers. It runs while the question is being posted, so posting takes up to about a minute. If the AI is off or the call fails, the question is posted normally without a draft ("Not sure" questions go under Other). The prompt is in [`plant_doctor.py`](plant_doctor.py). Each question costs a few cents of API usage.
+This shows on the question page in a box clearly labeled as an AI draft, above the community answers. It runs while the question is being posted, so posting takes up to about a minute. If the AI is off or the call fails, the question is posted normally without a draft ("Not sure" questions go under Other). The prompt is in [`plant_doctor.py`](plant_doctor.py). Each question costs a few cents, billed to the Google Cloud project.
 
 ## Garden Helper (AI chat)
 
@@ -142,6 +144,22 @@ A chatbot for logged-in users at `/garden-helper/`, linked in the header and das
 - Claude sees the last 20 messages of the conversation.
 - Each user can send 40 messages a day (`DAILY_LIMIT` in [`chatbot.py`](chatbot.py)) to keep API costs predictable. Each message costs a fraction of a cent to a few cents.
 - The prompt and garden facts are in [`chatbot.py`](chatbot.py). Update them there if the garden's details change.
+
+## AI setup (Claude on Vertex AI)
+
+The Plant Doctor and Garden Helper call Claude through Google Cloud Vertex AI, so there's no Anthropic API key; usage is billed to your Google Cloud project.
+
+1. Turn on the Vertex AI API:
+
+       gcloud services enable aiplatform.googleapis.com --project YOUR-PROJECT
+
+2. In the Google Cloud console, open **Vertex AI → Model Garden**, find **Claude Opus 5.5** and **Claude Opus 4.8**, and click **Enable** on each (accept the terms). Opus 4.8 is the backup the app retries on if Opus 5.5 declines a request.
+3. Sign in so the app can use your Google account:
+   - Locally: `gcloud auth application-default login`
+   - On Cloud Run: give the service's service account the **Vertex AI User** role.
+4. Set `VERTEX_PROJECT_ID=YOUR-PROJECT` in `.env` and restart the app.
+
+If sign-in or the API call fails, the app keeps working: questions post without an AI draft, and the chat shows a "try again" message.
 
 ## Garden Journal
 

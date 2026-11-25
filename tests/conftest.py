@@ -9,6 +9,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 @pytest.fixture(autouse=True)
 def no_real_services(monkeypatch):
-    """Tests never call the real Anthropic API or Google Cloud Storage."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    """Tests never call the real Vertex AI or Google Cloud Storage."""
+    monkeypatch.delenv("VERTEX_PROJECT_ID", raising=False)
     monkeypatch.delenv("GCS_BUCKET", raising=False)
