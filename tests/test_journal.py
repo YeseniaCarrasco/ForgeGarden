@@ -1,21 +1,13 @@
 import pytest
 
-from app import create_app
-
 
 @pytest.fixture
-def client(tmp_path):
-    app = create_app({
-        "TESTING": True,
-        "SECRET_KEY": "test",
-        "ADMIN_USERNAME": "alice",
-        "DATABASE": str(tmp_path / "test.db"),
-    })
-    return app.test_client()
+def client(make_client):
+    return make_client()
 
 
 def login(client, username="alice", password="password123"):
-    client.get("/logout")
+    client.post("/logout")
     client.post("/login", data={"username": username, "password": password})
 
 
@@ -32,18 +24,24 @@ def publish(client, **overrides):
     return client.post("/journal/new", data={**POST, **overrides})
 
 
-def test_journal_is_public_with_empty_state(client):
+def test_journal_requires_login(client):
+    assert "/login?next=" in client.get("/journal/").headers["Location"]
+    assert "/login?next=" in client.get("/journal/1").headers["Location"]
+
+
+def test_journal_empty_state(client):
+    login(client, "bob", "builder456")
     page = client.get("/journal/").get_data(as_text=True)
     assert "Garden Journal" in page
     assert "No journal posts yet" in page
     assert "New post" not in page
 
 
-def test_admin_publishes_and_anyone_can_read(client):
+def test_admin_publishes_and_any_user_can_read(client):
     login(client)
     resp = publish(client)
     assert resp.headers["Location"].endswith("/journal/1")
-    client.get("/logout")
+    login(client, "bob", "builder456")
     listing = client.get("/journal/").get_data(as_text=True)
     assert "On soil as a living system" in listing
     assert "First paragraph about soil life." in listing
@@ -52,7 +50,7 @@ def test_admin_publishes_and_anyone_can_read(client):
     assert "Second paragraph." in page
     assert 'href="https://example.org/soil"' in page
     assert "A book about soil" in page
-    assert "Garden Manager" in page
+    assert "Garden Manager" in page and "alice" in page
     assert "Edit" not in page
 
 

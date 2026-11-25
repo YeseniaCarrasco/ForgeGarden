@@ -5,6 +5,14 @@ from datetime import date
 from flask import current_app, g
 
 SCHEMA = """
+-- Accounts. Only Werkzeug password hashes are stored, never plain text.
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- One row per compost route day; UNIQUE route_date means one volunteer per day.
 CREATE TABLE IF NOT EXISTS compost_signups (
     id INTEGER PRIMARY KEY,
