@@ -1,21 +1,13 @@
 import pytest
 
-from app import create_app
-
 
 @pytest.fixture
-def client(tmp_path):
-    app = create_app({
-        "TESTING": True,
-        "SECRET_KEY": "test",
-        "ADMIN_USERNAME": "alice",
-        "DATABASE": str(tmp_path / "test.db"),
-    })
-    return app.test_client()
+def client(make_client):
+    return make_client()
 
 
 def login(client, username, password):
-    client.get("/logout")
+    client.post("/logout")
     client.post("/login", data={"username": username, "password": password})
 
 
@@ -42,27 +34,33 @@ def answer(client, qid=1, body="Check for squash vine borers at the base of the 
 
 # ---- viewing ----
 
-def test_board_is_public_with_empty_state(client):
+def test_board_requires_login(client):
+    assert "/login?next=" in client.get("/plant-help/").headers["Location"]
+    assert "/login?next=" in client.get("/plant-help/1").headers["Location"]
+
+
+def test_board_empty_state(client):
+    as_carol(client)
     page = client.get("/plant-help/").get_data(as_text=True)
     assert "Plant Help" in page
     assert "No questions yet" in page
     assert "Organic answers only" in page
-    assert "Log in to ask" in page
+    assert 'href="/plant-help/ask"' in page
 
 
-def test_questions_and_answers_visible_when_logged_out(client):
+def test_questions_and_answers_visible_to_other_users(client):
     as_bob(client)
     ask(client)
     answer(client)
-    client.get("/logout")
+    as_carol(client)
     listing = client.get("/plant-help/").get_data(as_text=True)
     assert "Why are my squash leaves wilting?" in listing
     assert "1 answer" in listing
     page = client.get("/plant-help/1").get_data(as_text=True)
     assert "squash vine borers" in page
     assert "<p>Leaves droop every afternoon.</p>" in page  # paragraphs
-    assert "Log in</a> to answer" in page
-    assert 'action="/plant-help/1/answer"' not in page
+    assert "Asked by bob" in page
+    assert 'action="/plant-help/1/answer"' in page
 
 
 def test_topic_filter(client):
@@ -75,6 +73,7 @@ def test_topic_filter(client):
 
 
 def test_missing_question_is_404(client):
+    as_bob(client)
     assert client.get("/plant-help/99").status_code == 404
 
 
@@ -115,7 +114,7 @@ def test_answer_requires_login_and_text(client):
     as_bob(client)
     ask(client)
     assert answer(client, body="   ").status_code == 400
-    client.get("/logout")
+    client.post("/logout")
     assert "/login" in answer(client).headers["Location"]
 
 
@@ -147,10 +146,10 @@ def test_only_asker_can_mark_helpful(client):
     assert b"This helped" in client.get("/plant-help/1").data
     client.post("/plant-help/1/helpful/1")
     page = client.get("/plant-help/1").get_data(as_text=True)
-    assert "This helped Bob Builder" in page
+    assert "This helped bob" in page
     assert "✓ Helped" in client.get("/plant-help/").get_data(as_text=True)
     client.post("/plant-help/1/helpful/1")  # toggle off
-    assert "This helped Bob Builder" not in client.get("/plant-help/1").get_data(as_text=True)
+    assert "This helped bob" not in client.get("/plant-help/1").get_data(as_text=True)
 
 
 def test_cannot_mark_answer_from_another_question(client):

@@ -11,13 +11,14 @@
       {% if q.helpful_answer_id %}<span class="tag solved">✓ Helped</span>{% endif %}
     </div>
     <h1>{{ q.title }}</h1>
-    <p class="byline">Asked by {{ display_name(q.username) }} · {{ q.created_at|short_date }}</p>
+    <p class="byline">Asked by {{ q.username }} · {{ q.created_at|short_date }}</p>
     <div class="prose">
       {% for p in q.body|paragraphs %}<p>{{ p }}</p>{% endfor %}
     </div>
     {% if can_delete(q.username) %}
       <form method="post" action="{{ url_for('board.delete_question', qid=q.id) }}"
             onsubmit="return confirm('Delete this question and all its answers?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="link-button">Delete question</button>
       </form>
     {% endif %}
@@ -28,25 +29,27 @@
     {% for a in answers %}
       {% set helpful = q.helpful_answer_id == a.id %}
       <div class="answer{% if helpful %} helpful{% endif %}" id="answer-{{ a.id }}">
-        {% if helpful %}<p class="tag solved">✓ This helped {{ display_name(q.username) }}</p>{% endif %}
+        {% if helpful %}<p class="tag solved">✓ This helped {{ q.username }}</p>{% endif %}
         <div class="prose">
           {% for p in a.body|paragraphs %}<p>{{ p }}</p>{% endfor %}
         </div>
         <div class="answer-foot">
           <span class="byline">
-            {{ display_name(a.username) }}
+            {{ a.username }}
             {% if is_admin(a.username) %}<span class="tag manager">Garden Manager</span>{% endif %}
             · {{ a.created_at|short_date }}
           </span>
           <span class="actions">
             {% if session.username == q.username %}
               <form method="post" action="{{ url_for('board.mark_helpful', qid=q.id, aid=a.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="link-button green">{{ "Unmark" if helpful else "This helped" }}</button>
               </form>
             {% endif %}
             {% if can_delete(a.username) %}
               <form method="post" action="{{ url_for('board.delete_answer', aid=a.id) }}"
                     onsubmit="return confirm('Delete this answer?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="link-button">Delete</button>
               </form>
             {% endif %}
@@ -59,6 +62,7 @@
 
     {% if session.username %}
       <form method="post" action="{{ url_for('board.answer', qid=q.id) }}" class="answer-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="body">Your answer</label>
         {% if answer_error %}<div class="flash error" role="alert">{{ answer_error }}</div>{% endif %}
         <textarea id="body" name="body" rows="5" maxlength="5000" required
