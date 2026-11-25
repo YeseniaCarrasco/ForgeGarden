@@ -15,6 +15,11 @@
     <div class="prose">
       {% for p in q.body|paragraphs %}<p>{{ p }}</p>{% endfor %}
     </div>
+    {% if q.photo_key %}
+      <a href="{{ url_for('photos.serve', key=q.photo_key) }}" target="_blank" rel="noopener">
+        <img class="post-photo" src="{{ url_for('photos.serve', key=q.photo_key) }}" alt="Photo attached to this question">
+      </a>
+    {% endif %}
     {% if can_delete(q.username) %}
       <form method="post" action="{{ url_for('board.delete_question', qid=q.id) }}"
             onsubmit="return confirm('Delete this question and all its answers?');">
@@ -22,6 +27,18 @@
       </form>
     {% endif %}
   </article>
+
+  {% if ai %}
+    <aside class="plant-doctor" aria-labelledby="plant-doctor-heading">
+      <h2 id="plant-doctor-heading">🤖 Plant Doctor's first take</h2>
+      <p class="ai-label">AI-generated draft while you wait for the garden manager. It can be wrong, so check before you treat.</p>
+      <p class="ai-topic">Suggested topic: <span class="tag topic">{{ topics[ai.topic] }}</span></p>
+      <h3>Likely issues</h3>
+      <ul>{% for issue in ai.likely_issues %}<li>{{ issue }}</li>{% endfor %}</ul>
+      <h3>Organic treatment idea</h3>
+      <div class="prose">{% for p in ai.organic_treatment|paragraphs %}<p>{{ p }}</p>{% endfor %}</div>
+    </aside>
+  {% endif %}
 
   <section id="answers">
     <h2>{{ answers|length }} answer{{ "" if answers|length == 1 else "s" }}</h2>

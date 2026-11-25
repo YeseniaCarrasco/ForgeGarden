@@ -9,10 +9,12 @@
   {% include "_organic_note.html" %}
   {% include "_form_errors.html" %}
 
-  <form method="post">
+  <form method="post" enctype="multipart/form-data">
     <label for="topic">Topic</label>
     <select id="topic" name="topic" required>
       <option value="">Choose a topic…</option>
+      <option value="{{ not_sure }}"{% if request.form.get('topic') == not_sure %} selected{% endif %}>
+        {{ "Not sure (the Plant Doctor will suggest one)" if plant_doctor_on else "Not sure" }}</option>
       {% for key, label in topics.items() %}
         <option value="{{ key }}"{% if request.form.get('topic') == key %} selected{% endif %}>{{ label }}</option>
       {% endfor %}
@@ -23,6 +25,12 @@
     <label for="body">Details</label>
     <textarea id="body" name="body" rows="7" maxlength="5000" required
               placeholder="What plant is it? Where is it growing? What have you tried?">{{ request.form.get('body', '') }}</textarea>
+    <label for="photo">Photo <span class="optional">(optional)</span></label>
+    <input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+    <p class="field-hint">A close-up of the leaves, pests, or mold helps a lot. JPEG, PNG, GIF, or WebP, up to 5 MB.</p>
+    {% if plant_doctor_on %}
+      <p class="field-hint">🤖 After you post, the Plant Doctor (AI) writes a quick first take while you wait for the garden manager. This can take up to a minute.</p>
+    {% endif %}
     <button type="submit" class="purple">Post question</button>
   </form>
   <p class="link-row"><a href="{{ url_for('board.index') }}">← Back to Plant Help</a></p>

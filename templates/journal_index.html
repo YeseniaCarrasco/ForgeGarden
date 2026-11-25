@@ -29,6 +29,9 @@
             <span class="tag {{ p.kind }}">{{ kinds[p.kind] }}</span>
             <span>{{ p.created_at|short_date }}</span>
           </div>
+          {% if p.photo_key %}
+            <img class="card-photo" src="{{ url_for('photos.serve', key=p.photo_key) }}" alt="" loading="lazy">
+          {% endif %}
           <h2><a href="{{ url_for('journal.post', pid=p.id) }}">{{ p.title }}</a></h2>
           <p>{{ excerpt(p.body) }}</p>
           <a class="read-more" href="{{ url_for('journal.post', pid=p.id) }}">Read more →</a>

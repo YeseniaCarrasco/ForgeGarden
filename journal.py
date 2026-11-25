@@ -2,12 +2,14 @@
 
 Anyone can read. Only the garden manager (admin) can write, edit, or delete.
 A post is either a "thought" or a "reading" (something to read, with an
-optional link). This is separate from any future announcements page.
+optional link). A post can have one photo. This is separate from any future
+announcements page.
 """
 from flask import (
     Blueprint, abort, flash, redirect, render_template, request, session, url_for,
 )
 
+import storage
 from auth import admin_required
 from content import clean, clean_url, excerpt
 from db import get_db
@@ -40,6 +42,11 @@ def read_form():
         errors += [err] if err else []
     values["link_url"], err = clean_url(form, "link_url", "Link")
     errors += [err] if err else []
+    try:
+        values["upload"] = storage.read_upload(request.files.get("photo"))
+    except storage.PhotoError as e:
+        errors.append(f"{e} Please choose the photo again.")
+        values["upload"] = None
     return values, errors
 
 
@@ -71,12 +78,14 @@ def new():
     if request.method == "POST":
         values, errors = read_form()
         if not errors:
+            photo_key = storage.save_photo(*values["upload"]) if values["upload"] else None
             db = get_db()
             cur = db.execute(
-                "INSERT INTO journal_posts (username, kind, title, body, link_url, link_title)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO journal_posts"
+                " (username, kind, title, body, link_url, link_title, photo_key)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (session["username"], values["kind"], values["title"], values["body"],
-                 values["link_url"] or None, values["link_title"] or None),
+                 values["link_url"] or None, values["link_title"] or None, photo_key),
             )
             db.commit()
             flash("Journal post published.", "success")
@@ -93,15 +102,24 @@ def edit(pid):
     values, errors = dict(existing), []
     if request.method == "POST":
         values, errors = read_form()
+        values["photo_key"] = existing["photo_key"]
         if not errors:
+            old_key = existing["photo_key"]
+            if values["upload"]:
+                values["photo_key"] = storage.save_photo(*values["upload"])
+            elif request.form.get("remove_photo"):
+                values["photo_key"] = None
             db = get_db()
             db.execute(
                 "UPDATE journal_posts SET kind = ?, title = ?, body = ?, link_url = ?,"
-                " link_title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                " link_title = ?, photo_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (values["kind"], values["title"], values["body"],
-                 values["link_url"] or None, values["link_title"] or None, pid),
+                 values["link_url"] or None, values["link_title"] or None,
+                 values["photo_key"], pid),
             )
             db.commit()
+            if old_key and old_key != values["photo_key"]:
+                storage.delete_photo(old_key)
             flash("Journal post updated.", "success")
             return redirect(url_for("journal.post", pid=pid))
     return render_template(
@@ -112,9 +130,10 @@ def edit(pid):
 @bp.route("/<int:pid>/delete", methods=["POST"])
 @admin_required
 def delete(pid):
-    get_post(pid)
+    existing = get_post(pid)
     db = get_db()
     db.execute("DELETE FROM journal_posts WHERE id = ?", (pid,))
     db.commit()
+    storage.delete_photo(existing["photo_key"])
     flash("Journal post deleted.", "success")
     return redirect(url_for("journal.index"))
