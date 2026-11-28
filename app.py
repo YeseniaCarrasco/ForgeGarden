@@ -23,6 +23,7 @@ import journal
 import storage
 import volunteer
 from auth import (
+    LOCKOUT_MINUTES, clear_failed_logins, is_locked_out, record_failed_login,
     check_login, create_user, get_user, is_admin, login_required, normalize_username,
     redirect_to_login, role_for, validate_registration,
 )
@@ -47,11 +48,8 @@ def parse_day(text):
 
 
 def safe_next_url():
-    """The ?next= path, if it is a local path (avoids open redirects)."""
-    next_url = request.args.get("next", "")
-    if next_url.startswith("/") and not next_url.startswith("//"):
-        return next_url
-    return None
+    """The ?next= path, if it is a path on this site (avoids open redirects)."""
+    return content.local_path(request.args.get("next", ""))
 
 
 def create_app(test_config=None):
@@ -102,6 +100,22 @@ def create_app(test_config=None):
             return redirect(referrer)
         return redirect(url_for("about"))
 
+    @app.after_request
+    def security_headers(response):
+        """Browser protections for every page."""
+        headers = response.headers
+        # Don't let other sites show our pages in a frame (clickjacking).
+        headers.setdefault("X-Frame-Options", "DENY")
+        headers.setdefault(
+            "Content-Security-Policy",
+            "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
+        )
+        headers.setdefault("X-Content-Type-Options", "nosniff")
+        headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        if app.config["SESSION_COOKIE_SECURE"]:  # only when served over HTTPS (Cloud Run)
+            headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+        return response
+
     @app.context_processor
     def inject_globals():
         return {
@@ -151,12 +165,18 @@ def create_app(test_config=None):
     def login():
         if request.method == "POST":
             username = normalize_username(request.form.get("username"))
+            if is_locked_out(username):
+                flash("Too many failed login attempts for this account. "
+                      f"Please wait {LOCKOUT_MINUTES} minutes and try again.", "error")
+                return render_template("login.html"), 429
             user = check_login(username, request.form.get("password", ""))
             if user:
+                clear_failed_logins(username)
                 session.clear()
                 session["username"] = user["username"]
                 flash(f"Welcome back, {user['username']}!", "success")
                 return redirect(safe_next_url() or url_for("dashboard"))
+            record_failed_login(username)
             flash("Invalid username or password.", "error")
         return render_template("login.html")
 

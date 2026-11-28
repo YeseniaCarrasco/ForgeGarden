@@ -26,6 +26,10 @@ MODEL = "claude-sonnet-5-5"
 FALLBACKS = "default"
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 TIMEOUT_SECONDS = 60.0
+# Spending limits, so one person (or many throwaway accounts) can't use up the
+# API credits. Days are Pacific time. The site-wide limit covers both AI features.
+PLANT_DOCTOR_DAILY_LIMIT = 10  # AI drafts per user per day
+SITE_DAILY_LIMIT = 500         # AI requests per day for the whole site
 MAX_RETRIES = 1
 
 SYSTEM_PROMPT = """\
@@ -68,6 +72,46 @@ class Diagnosis(BaseModel):
     topic: Literal["wilting", "pests", "disease", "soil", "watering", "other"]
     likely_issues: List[str] = Field(description="1-4 likely causes, most likely first")
     organic_treatment: str = Field(description="A short, CCOF-compliant treatment plan")
+
+
+def _today_range():
+    from db import pacific_now, utc_range_for_pacific_day
+
+    return utc_range_for_pacific_day(pacific_now().date())
+
+
+def site_requests_today():
+    """AI requests started today across the site: new questions plus chat messages."""
+    from db import get_db
+
+    start, end = _today_range()
+    db = get_db()
+    questions = db.execute(
+        "SELECT COUNT(*) AS n FROM questions WHERE created_at >= %s AND created_at < %s",
+        (start, end),
+    ).fetchone()["n"]
+    chats = db.execute(
+        "SELECT COUNT(*) AS n FROM chat_messages WHERE role = 'user'"
+        " AND created_at >= %s AND created_at < %s",
+        (start, end),
+    ).fetchone()["n"]
+    return questions + chats
+
+
+def within_limits(username):
+    """Whether the Plant Doctor may run for a question this user just posted.
+
+    Both counts already include that new question.
+    """
+    from db import get_db
+
+    start, end = _today_range()
+    asked = get_db().execute(
+        "SELECT COUNT(*) AS n FROM questions WHERE username = %s"
+        " AND created_at >= %s AND created_at < %s",
+        (username, start, end),
+    ).fetchone()["n"]
+    return asked <= PLANT_DOCTOR_DAILY_LIMIT and site_requests_today() <= SITE_DAILY_LIMIT
 
 
 def is_enabled():

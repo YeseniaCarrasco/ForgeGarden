@@ -5,6 +5,7 @@ formatting is limited to paragraphs separated by blank lines.
 """
 import re
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 # The garden runs on Pacific time, wherever the server is (Cloud Run uses UTC).
@@ -52,3 +53,21 @@ def clean_url(form, field, label):
     if len(value) > 500:
         return value, f"{label} must be 500 characters or fewer."
     return value, None
+
+
+def local_path(url):
+    """Return `url` if it's a path on this site (like "/dashboard"), else None.
+
+    Used for every redirect target that comes from a request, to prevent open
+    redirects. Rejects "//host" and "/\\host" (browsers treat both as another
+    site) and any whitespace or control character, since browsers drop those:
+    "/<tab>/evil.example" would otherwise become "//evil.example".
+    """
+    if not url or not url.startswith("/") or url.startswith("//") or "\\" in url:
+        return None
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in url):
+        return None
+    parts = urlsplit(url)
+    if parts.scheme or parts.netloc:
+        return None
+    return url
