@@ -16,9 +16,15 @@ def reserve(client, day=NEXT_FRIDAY):
     return client.post(f"/farmstand/{day}/reserve", follow_redirects=True).get_data(as_text=True)
 
 
-def test_page_requires_login(client):
-    r = client.get("/farmstand/")
-    assert r.status_code == 302 and "/login" in r.headers["Location"]
+def test_page_is_viewable_logged_out(client):
+    login(client, "alice")
+    set_boxes(client, 3)
+    client.post(f"/farmstand/{NEXT_FRIDAY}/items", data={"name": "Kale"})
+    client.post("/logout")
+    page = client.get("/farmstand/").get_data(as_text=True)
+    assert "Kale" in page and "of 3 boxes left" in page
+    assert "Log in to reserve a box" in page
+    assert "Garden manager" not in page and "Remove" not in page
 
 
 def test_page_shows_next_friday(client):

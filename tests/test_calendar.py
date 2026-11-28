@@ -83,10 +83,12 @@ def test_layout_stacks_overlapping_blocks():
 
 # ---- calendar page ----
 
-def test_calendar_requires_login(client):
+def test_calendar_is_viewable_logged_out(client):
     resp = client.get("/calendar")
-    assert resp.status_code == 302
-    assert "/login?next=" in resp.headers["Location"]
+    assert resp.status_code == 200
+    page = resp.get_data(as_text=True)
+    assert "Compost Route" in page
+    assert "asked to log in when you sign up" in page
 
 
 def test_calendar_page(client):

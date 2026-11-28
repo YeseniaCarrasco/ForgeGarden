@@ -1,6 +1,12 @@
 {% set ep = request.endpoint or "" %}
 <header class="site-header">
-  <a class="brand" href="{{ url_for('about') }}">{{ site_name }}</a>
+  <a class="brand" href="{{ url_for('about') }}">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M6 26C6 13 14 6 27 5c0 13-7 21-19 21" fill="var(--accent)"/>
+      <path d="M6 26C11 19 16 14 22 10" fill="none" stroke="var(--frame)" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    {{ site_name }}
+  </a>
   <nav class="site-nav">
     <a href="{{ url_for('volunteer_calendar') }}"{% if ep.startswith('volunteer_calendar') or ep.startswith('compost') %} class="active"{% endif %}>Volunteer Calendar</a>
     <a href="{{ url_for('board.index') }}"{% if ep.startswith('board.') %} class="active"{% endif %}>Plant Help</a>

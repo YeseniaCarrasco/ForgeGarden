@@ -1,17 +1,37 @@
+/* ---- Greenhouse theme colors ----
+   Greens for leaves, terracotta (clay pots) for sign-ups and highlights, and a
+   glass teal for events. The names --purple and --blue are kept so existing
+   rules keep working; they now hold terracotta and teal. */
 :root {
-  --bg: #f3f5f1; --card: #fff; --text: #1f2a1f; --muted: #667066;
-  --accent: #2f7d4f; --accent-hover: #256640; --border: #d8ddd6;
-  --error-bg: #fdecea; --error: #a12a1f; --ok-bg: #e7f5ec; --ok: #1f6b3d;
-  --purple: #7a3fc2; --purple-hover: #6531a6; --purple-bg: #f1e9fb;
-  --blue: #2563b8; --blue-bg: #e6effb;
+  --bg: #f4f8f2; --card: #fbfdf9; --text: #1d2e22; --muted: #5a6d5f;
+  --accent: #3a7d4c; --accent-hover: #2e6a3e; --border: #cddbcd;
+  --error-bg: #fbe9e4; --error: #a3321f; --ok-bg: #e2f1e3; --ok: #23663a;
+  --purple: #b5542d; --purple-hover: #9a4524; --purple-bg: #f8e8dd;
+  --blue: #2c7480; --blue-bg: #e1f0f1;
+  --on-accent: #fff;
+  --frame: #2f5a3b;
+  --glass: rgba(250, 253, 248, .80); --glass-edge: rgba(255, 255, 255, .9);
+  --pane-line: rgba(255, 255, 255, .55);
+  --sky-top: #e8f3ea; --sky-mid: #d3e6d6; --sky-bottom: #b8d3bc;
+  --sun: rgba(255, 246, 214, .85);
+  --shadow: 0 1px 0 rgba(255, 255, 255, .8) inset, 0 24px 60px -24px rgba(34, 74, 44, .45);
+  --heading-font: "Fraunces", "Iowan Old Style", Georgia, serif;
 }
 @media (prefers-color-scheme: dark) {
+  /* The greenhouse at night: dark glass and a warm lamp glow. */
   :root {
-    --bg: #141814; --card: #1e241e; --text: #e6ebe6; --muted: #9aa59a;
-    --accent: #3d9a62; --accent-hover: #4caf73; --border: #334033;
-    --error-bg: #3a1d1a; --error: #f2a49b; --ok-bg: #1b3324; --ok: #9fdcb5;
-    --purple: #b48ae8; --purple-hover: #c6a4f0; --purple-bg: #2c2140;
-    --blue: #7fb0f0; --blue-bg: #1a2a40;
+    --bg: #142019; --card: #1a2a20; --text: #e2eee4; --muted: #9ab2a0;
+    --accent: #6cc184; --accent-hover: #86d09b; --border: #2e4636;
+    --error-bg: #3a1d1a; --error: #f2a49b; --ok-bg: #183220; --ok: #9fdcb5;
+    --purple: #e8946b; --purple-hover: #f0aa86; --purple-bg: #3a2418;
+    --blue: #7fc7cf; --blue-bg: #15302f;
+    --on-accent: #0f1a13;
+    --frame: #5c8f68;
+    --glass: rgba(19, 32, 24, .82); --glass-edge: rgba(255, 255, 255, .08);
+    --pane-line: rgba(255, 255, 255, .045);
+    --sky-top: #0d1611; --sky-mid: #112017; --sky-bottom: #17291d;
+    --sun: rgba(255, 196, 120, .10);
+    --shadow: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 24px 60px -24px rgba(0, 0, 0, .7);
   }
 }
 * { box-sizing: border-box; }
@@ -317,3 +337,96 @@ input[type="file"] { padding: 8px; font-size: .9rem; }
 .chat-form { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; }
 .chat-form textarea { flex: 1; resize: vertical; }
 .chat-form button { width: auto; margin: 0; padding: 10px 20px; }
+
+
+/* =====================================================================
+   Greenhouse look. The rules above set the layout; these add the glass,
+   the painted frame, the light, and the plants.
+   ===================================================================== */
+
+/* The greenhouse: daylight through glass panes, with plants along the bottom. */
+html { background: var(--sky-bottom); }
+body {
+  position: relative;
+  background:
+    repeating-linear-gradient(90deg, var(--pane-line) 0 2px, transparent 2px 180px),
+    repeating-linear-gradient(0deg, var(--pane-line) 0 2px, transparent 2px 140px),
+    radial-gradient(1100px 620px at 18% -8%, var(--sun), transparent 62%),
+    linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 55%, var(--sky-bottom) 100%);
+  background-attachment: fixed;
+  padding: 32px 16px 120px;
+}
+body::before {
+  /* A low bed of leaves along the bottom of the window. Decorative only. */
+  content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: 150px; z-index: 0;
+  pointer-events: none; opacity: .9;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='150' viewBox='0 0 520 150'%3E%3Cg fill='%236fa979'%3E%3Cpath d='M40 150C30 100 10 80 0 60c30 10 50 40 52 90z'/%3E%3Cpath d='M60 150c0-60 20-95 50-120-5 45-20 85-38 120z'/%3E%3Cpath d='M150 150c-10-45-40-70-70-80 40 0 70 30 82 80z'/%3E%3Cpath d='M230 150c5-55 35-90 75-105-15 40-40 75-62 105z'/%3E%3Cpath d='M330 150c-5-40-30-75-65-95 45 10 75 50 78 95z'/%3E%3Cpath d='M400 150c10-50 40-80 80-90-20 35-45 65-66 90z'/%3E%3Cpath d='M490 150c-8-35-25-60-50-80 35 12 58 45 62 80z'/%3E%3C/g%3E%3Cg fill='%234f8d5d'%3E%3Cpath d='M100 150c-5-35 5-65 25-85 0 35-8 62-15 85z'/%3E%3Cpath d='M190 150c-15-30-35-45-60-50 30-5 55 15 70 50z'/%3E%3Cpath d='M285 150c0-30 15-58 40-75-5 30-18 55-30 75z'/%3E%3Cpath d='M450 150c-12-28-30-42-55-48 30-2 52 18 65 48z'/%3E%3C/g%3E%3C/svg%3E") repeat-x bottom / 520px 150px;
+}
+@media (prefers-color-scheme: dark) {
+  body::before { opacity: .55; filter: brightness(.45) saturate(.8); }
+}
+main { position: relative; z-index: 1; }
+
+/* The main panel is a frosted glass pane in a painted green frame. */
+.card, .card.full {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+  border: 1px solid var(--glass-edge);
+  border-top: 6px solid var(--frame);
+  border-radius: 6px 6px 18px 18px;
+  box-shadow: var(--shadow);
+}
+
+/* Headings in a soft serif, like a botanical label. */
+h1, h2, .brand, .week-title h2 { font-family: var(--heading-font); letter-spacing: -.01em; }
+h1 { font-size: 1.75rem; font-weight: 600; color: var(--frame); }
+h2 { font-weight: 600; }
+@media (prefers-color-scheme: dark) { h1 { color: var(--text); } }
+
+/* Header: the site name with a leaf, and nav links in leaf green. */
+.brand { display: inline-flex; align-items: center; gap: 8px; font-size: 1.3rem; font-weight: 600; color: var(--frame); }
+@media (prefers-color-scheme: dark) { .brand { color: var(--text); } }
+.brand-mark { width: 26px; height: 26px; flex-shrink: 0; }
+.site-nav > a:not(.button) { color: var(--accent); }
+.site-nav > a.active { text-decoration-color: var(--purple); }
+
+/* Buttons: rounded like pebbles; the text color works in light and dark mode. */
+button, .button { border-radius: 999px; color: var(--on-accent); font-weight: 600; transition: background-color .15s, transform .15s; }
+button:active, .button:active { transform: translateY(1px); }
+.button.ghost { background: rgba(255, 255, 255, .45); color: var(--accent); border-color: var(--border); }
+@media (prefers-color-scheme: dark) { .button.ghost { background: rgba(255, 255, 255, .04); } }
+.link-button, .link-button:hover { color: var(--error); background: none; font-weight: 400; }
+.link-button.green { color: var(--accent); }
+.chip.selected, .week-day.today .wd-num, .today-tag { color: var(--on-accent); }
+.chat-suggestions .chip { font-weight: 400; }
+
+/* Form fields look like clear panes too. */
+input, textarea, select { background: rgba(255, 255, 255, .7); }
+@media (prefers-color-scheme: dark) { input, textarea, select { background: rgba(0, 0, 0, .25); } }
+
+/* Notes and the AI box are shaped like plant tags. */
+.organic-note { border-radius: 4px 14px 14px 4px; }
+.badge { background: var(--ok-bg); border: 1px solid var(--accent); }
+.plant-doctor { border-style: solid; border-width: 1px 1px 1px 4px; border-radius: 4px 14px 14px 4px; }
+
+/* Cards inside the page sit like seed trays on the bench. */
+.journal-card, .box-panel, .answer, .harvest-item, .day-col { background-color: rgba(255, 255, 255, .55); }
+@media (prefers-color-scheme: dark) {
+  .journal-card, .box-panel, .answer, .harvest-item, .day-col { background-color: rgba(255, 255, 255, .03); }
+}
+.answer.helpful { background: var(--ok-bg); }
+.harvest-item { box-shadow: 0 6px 18px -12px rgba(34, 74, 44, .5); }
+
+/* The About page's "what the garden hosts" list gets leaf bullets. */
+.features { list-style: none; padding-left: 0; }
+.features li { padding-left: 1.6em; position: relative; margin-bottom: 4px; }
+.features li::before { content: "\1F33F"; position: absolute; left: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  button, .button { transition: none; }
+}
+
+/* Keep the site name on one line; the nav wraps underneath it instead. */
+.brand { white-space: nowrap; }
+.site-header { flex-wrap: wrap; row-gap: 12px; }
