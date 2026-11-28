@@ -10,7 +10,7 @@ from flask import (
 )
 
 import storage
-from auth import admin_required
+from auth import admin_required, login_required
 from content import clean, clean_url, excerpt
 from db import NOW_TEXT, get_db
 
@@ -51,6 +51,7 @@ def read_form():
 
 
 @bp.route("/")
+@login_required
 def index():
     kind = request.args.get("kind", "")
     if kind not in KINDS:
@@ -67,6 +68,7 @@ def index():
 
 
 @bp.route("/<int:pid>")
+@login_required
 def post(pid):
     return render_template("journal_post.html", post=get_post(pid), kinds=KINDS)
 

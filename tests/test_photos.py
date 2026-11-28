@@ -80,6 +80,53 @@ def test_photo_route_only_serves_stored_photo_names(client, key):
     assert client.get(f"/photos/{key}").status_code == 404
 
 
+# ---- Who can see photos ----
+
+def test_logged_out_can_see_plant_help_photos(client, tmp_path):
+    login(client, "bob")
+    ask(client, photo=photo())
+    [key] = uploaded_files(tmp_path)
+    client.post("/logout")
+    assert f"/photos/{key}" in client.get("/plant-help/1").get_data(as_text=True)
+    served = client.get(f"/photos/{key}")
+    assert served.status_code == 200 and served.data == PNG
+    assert served.headers["Cache-Control"].startswith("public")
+
+
+def test_logged_out_can_see_farmstand_photos(client, tmp_path):
+    from helpers import NEXT_FRIDAY
+    login(client, "alice")
+    client.post(f"/farmstand/{NEXT_FRIDAY}/items", data={"name": "Kale", "photo": photo()},
+                content_type="multipart/form-data")
+    [key] = uploaded_files(tmp_path)
+    client.post("/logout")
+    assert f"/photos/{key}" in client.get(f"/farmstand/?day={NEXT_FRIDAY}").get_data(as_text=True)
+    served = client.get(f"/photos/{key}")
+    assert served.status_code == 200 and served.data == PNG
+
+
+def test_journal_photos_need_login(client, tmp_path):
+    login(client, "alice")
+    journal_post(client, photo=photo())
+    [key] = uploaded_files(tmp_path)
+    client.post("/logout")
+    resp = client.get(f"/photos/{key}")
+    assert resp.status_code == 302
+    assert resp.headers["Location"].startswith("/login?next=")
+
+    login(client, "bob")  # any logged-in user can see it
+    served = client.get(f"/photos/{key}")
+    assert served.status_code == 200 and served.data == PNG
+    # Only the browser may cache it, never a shared cache.
+    assert served.headers["Cache-Control"].startswith("private")
+
+
+def test_unknown_photo_sends_logged_out_visitors_to_login(client):
+    # Same answer as a journal photo, so a visitor can't tell which keys exist.
+    resp = client.get("/photos/" + "0" * 32 + ".png")
+    assert resp.status_code == 302 and "/login" in resp.headers["Location"]
+
+
 # ---- Garden Journal ----
 
 def journal_post(client, url="/journal/new", **extra):

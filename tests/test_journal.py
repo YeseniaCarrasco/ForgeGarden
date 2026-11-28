@@ -24,17 +24,29 @@ def publish(client, **overrides):
     return client.post("/journal/new", data={**POST, **overrides})
 
 
-def test_journal_is_viewable_logged_out(client):
+def test_journal_requires_login_to_read(client):
     login(client)  # alice, the garden manager
     publish(client)
     client.post("/logout")
-    assert client.get("/journal/").status_code == 200
-    resp = client.get("/journal/1")
-    assert resp.status_code == 200
-    page = resp.get_data(as_text=True)
-    assert POST["title"] in page
-    assert "/journal/1/edit" not in page and "/journal/1/delete" not in page
-    assert "/journal/new" not in client.get("/journal/").get_data(as_text=True)
+    for path in ["/journal/", "/journal/?kind=reading", "/journal/1"]:
+        resp = client.get(path)
+        assert resp.status_code == 302, path
+        assert resp.headers["Location"].startswith("/login?next=")
+    # Logging in from there returns to the post.
+    resp = client.post("/login?next=/journal/1", data={"username": "bob", "password": "builder456"})
+    assert resp.headers["Location"].endswith("/journal/1")
+    assert POST["title"] in client.get("/journal/1").get_data(as_text=True)
+
+
+def test_journal_actions_require_login(client):
+    login(client)
+    publish(client)
+    client.post("/logout")
+    for path in ["/journal/new", "/journal/1/edit", "/journal/1/delete"]:
+        resp = client.post(path, data=POST)
+        assert resp.status_code == 302 and "/login" in resp.headers["Location"], path
+    login(client)
+    assert POST["title"] in client.get("/journal/1").get_data(as_text=True)  # unchanged
 
 
 def test_journal_empty_state(client):

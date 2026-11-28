@@ -62,8 +62,11 @@ def test_public_pages_need_no_login(client, path):
     assert "/login" not in resp.headers.get("Location", "")
 
 
+# Logged-out visitors can VIEW only: About, Plant Help questions and answers,
+# the volunteer calendar, and the farmstand page.
 @pytest.mark.parametrize("path", [
-    "/calendar", "/calendar?week=2026-12-01", "/plant-help/", "/journal/", "/farmstand/",
+    "/calendar", "/calendar?week=2026-12-01", "/plant-help/", "/plant-help/?topic=pests",
+    "/farmstand/", "/farmstand/?day=2026-11-27",
 ])
 def test_read_only_pages_are_public(client, path):
     resp = client.get(path)
@@ -71,14 +74,16 @@ def test_read_only_pages_are_public(client, path):
     assert "/login" not in resp.headers.get("Location", "")
 
 
-@pytest.mark.parametrize("path", ["/plant-help/1", "/journal/1"])
-def test_missing_posts_are_404_not_login(client, path):
-    assert client.get(path).status_code == 404
+def test_missing_question_is_404_not_login(client):
+    assert client.get("/plant-help/1").status_code == 404
 
 
 @pytest.mark.parametrize("path", [
-    "/dashboard", "/calendar/compost/2026-11-20", "/plant-help/ask", "/journal/new",
+    "/dashboard",
+    "/journal/", "/journal/?kind=thought", "/journal/1", "/journal/new", "/journal/1/edit",
     "/garden-helper/",
+    "/plant-help/ask",
+    "/calendar/compost/2026-11-20",
 ])
 def test_every_other_page_requires_login(client, path):
     resp = client.get(path)
@@ -87,14 +92,29 @@ def test_every_other_page_requires_login(client, path):
     assert path.split("?")[0] in resp.headers["Location"].replace("%2F", "/")
 
 
-def test_post_routes_require_login(client):
-    for path in ["/plant-help/1/answer", "/journal/1/delete", "/calendar/compost/2026-11-20",
-                 "/farmstand/2026-11-20/reserve", "/farmstand/2026-11-20/items",
-                 "/plant-help/1/delete", "/garden-helper/new"]:
-        assert "/login" in client.post(path).headers["Location"]
+@pytest.mark.parametrize("path", [
+    # Plant Help: asking, answering, marking helpful, deleting.
+    "/plant-help/ask", "/plant-help/1/answer", "/plant-help/1/helpful/1",
+    "/plant-help/1/delete", "/plant-help/answers/1/delete",
+    # Compost route sign-ups.
+    "/calendar/compost/2026-11-20", "/calendar/compost/2026-11-20/cancel",
+    # Farmstand: reserving and cancelling a box, and the manager's actions.
+    "/farmstand/2026-11-27/reserve", "/farmstand/2026-11-27/cancel",
+    "/farmstand/2026-11-27/settings", "/farmstand/2026-11-27/items", "/farmstand/items/1/delete",
+    # Garden Journal (manager only).
+    "/journal/new", "/journal/1/edit", "/journal/1/delete",
+    # Garden Helper chat.
+    "/garden-helper/", "/garden-helper/new",
+    # Account.
+    "/logout",
+])
+def test_every_action_requires_login(client, path):
+    resp = client.post(path)
+    assert resp.status_code == 302
+    assert resp.headers["Location"].startswith("/login?next=")
 
 
-@pytest.mark.parametrize("path", ["/plant-help/", "/calendar", "/journal/", "/farmstand/"])
+@pytest.mark.parametrize("path", ["/plant-help/", "/calendar", "/farmstand/"])
 def test_public_pages_cannot_be_posted_to_logged_out(client, path):
     # Public pages are view-only: a POST to them still needs login (or isn't allowed).
     resp = client.post(path)

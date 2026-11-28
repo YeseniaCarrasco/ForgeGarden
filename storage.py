@@ -4,6 +4,10 @@ Photos go to a Google Cloud Storage bucket when GCS_BUCKET is set, and to a
 local folder (UPLOAD_FOLDER, default instance/uploads) otherwise. Either way
 they are served through /photos/<key>, so the bucket can stay private.
 
+Logged-out visitors can see only the photos on Plant Help questions and
+farmstand items, which are public pages. Every other photo (Garden Journal
+photos) needs login.
+
 Files are checked by their first bytes, not by the name or the browser's
 content type, and saved under a random name.
 """
@@ -11,7 +15,10 @@ import os
 import re
 import uuid
 
-from flask import Blueprint, abort, current_app, send_from_directory, Response
+from flask import Blueprint, abort, current_app, send_from_directory, session, Response
+
+from auth import redirect_to_login
+from db import get_db
 
 bp = Blueprint("photos", __name__, url_prefix="/photos")
 
@@ -105,10 +112,23 @@ def delete_photo(key):
         current_app.logger.warning("Could not delete photo %s", key, exc_info=True)
 
 
+def is_public_photo(key):
+    """True if the photo belongs to a Plant Help question or a farmstand item."""
+    return get_db().execute(
+        "SELECT 1 FROM questions WHERE photo_key = %s"
+        " UNION ALL SELECT 1 FROM harvest_items WHERE photo_key = %s LIMIT 1",
+        (key, key),
+    ).fetchone() is not None
+
+
 @bp.route("/<key>")
 def serve(key):
     if not KEY_PATTERN.match(key):
         abort(404)
+    public = is_public_photo(key)
+    if not public and "username" not in session:
+        # Journal photos (and unknown keys) need login; don't reveal which it is.
+        return redirect_to_login()
     if current_app.config.get("GCS_BUCKET"):
         from google.api_core.exceptions import NotFound
 
@@ -119,7 +139,11 @@ def serve(key):
         response = Response(data, mimetype=media_type(key))
     else:
         response = send_from_directory(_local_folder(), key, mimetype=media_type(key))
-    # Keys are random and never reused, so browsers can cache photos for a long time.
-    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    # Keys are random and never reused, so browsers can cache photos for a long
+    # time. Only public photos may be kept by shared caches; journal photos are
+    # for logged-in users, so they're cached by the browser only.
+    response.headers["Cache-Control"] = (
+        f"{'public' if public else 'private'}, max-age=31536000, immutable"
+    )
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response

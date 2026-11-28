@@ -40,13 +40,15 @@ REQUIRED_SETTINGS = ("SECRET_KEY", "ADMIN_USERNAME", "DATABASE_URL")
 # Endpoints anyone can open without logging in. "static" serves the CSS.
 PUBLIC_ENDPOINTS = {"about", "about_alias", "login", "register", "static"}
 
-# Read-only pages anyone can view (GET only). Everything that changes data
-# (asking, answering, signing up, reserving, chatting, managing) still needs
-# login: those routes also have their own login_required / admin_required.
+# Read-only pages anyone can view (GET only): Plant Help questions and answers,
+# the volunteer calendar, and the farmstand. Everything else needs login,
+# including the Garden Journal and the Garden Helper chat. Every route that
+# changes data also has its own login_required / admin_required check.
+# photos.serve is listed so it can decide per photo: Plant Help and farmstand
+# photos are public, and every other photo (journal photos) needs login.
 PUBLIC_VIEW_ENDPOINTS = {
     "volunteer_calendar",
     "board.index", "board.question",
-    "journal.index", "journal.post",
     "farmstand.index",
     "photos.serve",
 }
