@@ -30,6 +30,13 @@ Requires Python 3.10 or newer (the live site uses 3.13).
 
    On Windows, use `python -m venv .venv` and `.venv\Scripts\pip install -r requirements.txt`, and write `.venv\Scripts\` instead of `.venv/bin/` in the commands below.
 
+   On an Intel Mac, `pip install -r requirements.txt` fails: cryptography 49 and later has no prebuilt package for Intel Macs. For local development only, install everything else plus cryptography 48.0.1:
+
+       grep -v '^cryptography' requirements.txt > /tmp/req-mac.txt
+       .venv/bin/pip install -r /tmp/req-mac.txt cryptography==48.0.1
+
+   The live site and the GitHub tests still use the version pinned in `requirements.txt`.
+
 2. Create a `.env` file in the project root with these variables:
 
        SECRET_KEY=
