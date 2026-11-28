@@ -156,7 +156,7 @@ A chatbot for logged-in users at `/garden-helper/`, linked in the header and das
 
 - Conversations are saved in the `chat_messages` table. Each browser session has its own chat, and only that user can see it. **New chat** starts over.
 - Claude sees the last 20 messages of the conversation.
-- Each user can send 40 messages a day (`DAILY_LIMIT` in [`chatbot.py`](chatbot.py)) to keep API costs predictable. Each message costs a fraction of a cent to a few cents.
+- Each user can send 40 messages a day (`DAILY_LIMIT` in [`chatbot.py`](chatbot.py)) to keep API costs predictable. The count resets at midnight Pacific time. Each message costs a fraction of a cent to a few cents.
 - The prompt and garden facts are in [`chatbot.py`](chatbot.py). Update them there if the garden's details change.
 
 ## AI setup (Claude API)
@@ -197,6 +197,55 @@ Then set `GCS_BUCKET=YOUR-BUCKET`. The app uses Google's default credentials: on
 
 Posts on both pages are plain text: any HTML is shown as text, not rendered. Leave a blank line between paragraphs.
 
+## Deploying to Cloud Run
+
+The app runs on Google Cloud Run as the service `forge-garden` (project `my-signup31`, region `us-west1`). `gcloud run deploy --source .` builds it from source with Google's buildpacks:
+
+- [`Procfile`](Procfile) starts the app with gunicorn: `gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 app:app`.
+- [`.python-version`](.python-version) asks for Python 3.13, the version the pinned requirements are checked against.
+- [`.gcloudignore`](.gcloudignore) keeps `.env`, `.venv/`, `forge.db`, `instance/`, the tests, and Git files out of the upload. Secrets come from Secret Manager, never from `.env`.
+
+### Settings on Cloud Run
+
+| Variable | Where it comes from |
+| --- | --- |
+| `SECRET_KEY` | Secret Manager secret `FORGE_SECRET_KEY` (latest version) |
+| `DATABASE_URL` | Secret Manager secret `FORGE_DATABASE_URL` (the production Neon database) |
+| `ANTHROPIC_API_KEY` | Secret Manager secret `FORGE_ANTHROPIC_API_KEY` |
+| `ADMIN_USERNAME` | Plain environment variable (the garden manager's username) |
+| `SITE_NAME` | Plain environment variable: `Forge Garden` |
+| `TZ` | Plain environment variable: `America/Los_Angeles` |
+| `GCS_BUCKET` | Plain environment variable: `forge-garden-photos-my-signup31` |
+
+Deploys use `--update-secrets` and `--update-env-vars`, so they change only these settings and keep anything else already set on the service. The service's runtime service account needs **Secret Manager Secret Accessor** on the three secrets and **Storage Object User** on the photo bucket.
+
+### Automatic deploys (GitHub Actions)
+
+[`.github/workflows/tests.yml`](.github/workflows/tests.yml) has two jobs:
+
+- **test** runs on every pull request and every push to `main`: Python 3.13, `pip install -r requirements.txt`, then `pytest`. It uses only the test database (`TEST_DATABASE_URL`) and no real keys. Test runs share a concurrency group, so two runs never use the test database at the same time; a new run waits for the current one to finish.
+- **deploy** runs after **test** passes, only on a push to `main`. It signs in to Google Cloud with a service account key, runs `gcloud run deploy`, then signs out and deletes the key file, even if a step failed.
+
+Set these once in the GitHub repository (**Settings → Secrets and variables → Actions**):
+
+| Name | Kind | Value |
+| --- | --- | --- |
+| `TEST_DATABASE_URL` | Secret | Connection string for the separate **test** database. Never the production one: tests empty every table. |
+| `GCP_CREDENTIALS` | Secret | JSON key for a deploy service account allowed to deploy from source (for example **Cloud Run Source Developer**, **Service Account User** and **Service Usage Consumer**). |
+| `ADMIN_USERNAME` | Variable | The garden manager's username. The deploy job stops if it's missing. |
+
+Pull requests from forks don't get these secrets, so their test job can't reach the test database.
+
+### Deploying by hand
+
+From the project folder, signed in with `gcloud auth login`:
+
+    gcloud run deploy forge-garden --source . --project my-signup31 --region us-west1 \
+      --update-secrets="SECRET_KEY=FORGE_SECRET_KEY:latest,DATABASE_URL=FORGE_DATABASE_URL:latest,ANTHROPIC_API_KEY=FORGE_ANTHROPIC_API_KEY:latest" \
+      --update-env-vars="ADMIN_USERNAME=YOUR_ADMIN_USERNAME,SITE_NAME=Forge Garden,TZ=America/Los_Angeles,GCS_BUCKET=forge-garden-photos-my-signup31"
+
+Replace `YOUR_ADMIN_USERNAME` with the garden manager's username. After the first deploy, register that username on the live site right away (see [Setup](#setup)).
+
 ## Project structure
 
     app.py              Flask app setup, settings, About/register/login/dashboard, calendar routes
@@ -214,6 +263,10 @@ Posts on both pages are plain text: any HTML is shown as text, not rendered. Lea
     static/style.css    Styles, including light and dark mode colors
     tests/              pytest tests
     requirements.txt    Pinned dependencies
+    Procfile            How Cloud Run starts the app (gunicorn)
+    .python-version     Python version for the Cloud Run build
+    .gcloudignore       Files left out of Cloud Run uploads
+    .github/workflows/  GitHub Actions: tests on every PR, deploy on push to main
 
 ## Running tests
 

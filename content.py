@@ -5,6 +5,11 @@ formatting is limited to paragraphs separated by blank lines.
 """
 import re
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+# The garden runs on Pacific time, wherever the server is (Cloud Run uses UTC).
+# The tzdata package supplies the zone data if the server has none.
+PACIFIC = ZoneInfo("America/Los_Angeles")
 
 _BLANK_LINES = re.compile(r"\n\s*\n")
 
@@ -24,8 +29,8 @@ def excerpt(text, limit=240):
 
 
 def short_date(timestamp):
-    """Stored UTC timestamp text -> 'Nov 11, 2026' in the server's local time."""
-    when = datetime.fromisoformat(timestamp).replace(tzinfo=timezone.utc).astimezone()
+    """Stored UTC timestamp text -> 'Nov 11, 2026' in Pacific time."""
+    when = datetime.fromisoformat(timestamp).replace(tzinfo=timezone.utc).astimezone(PACIFIC)
     return f"{when:%b} {when.day}, {when.year}"
 
 

@@ -195,3 +195,23 @@ def test_cancel_signup(client):
     assert b"Cancelled your compost route" in dash
     assert b"No upcoming sign-ups" in dash
     assert b'href="/calendar/compost/2026-11-20"' in client.get("/calendar?week=2026-11-20").data
+
+
+def test_today_is_pacific(monkeypatch):
+    import time as clock
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app import create_app
+    from db import current_date
+
+    # Even on a server set to another time zone, "today" is the Pacific date.
+    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    clock.tzset()
+    try:
+        app = create_app({"TESTING": True})  # no TODAY pin
+        with app.app_context():
+            assert current_date() == datetime.now(ZoneInfo("America/Los_Angeles")).date()
+    finally:
+        monkeypatch.delenv("TZ")
+        clock.tzset()
